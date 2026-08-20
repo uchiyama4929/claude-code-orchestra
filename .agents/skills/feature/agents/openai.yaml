@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feature"
+  short_description: "Help with Feature tasks and workflows"
+  default_prompt: "Use $feature to complete this workflow."

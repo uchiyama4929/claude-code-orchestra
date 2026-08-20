@@ -1,0 +1,4 @@
+interface:
+  display_name: "Context Loader"
+  short_description: "Help with Context Loader tasks"
+  default_prompt: "Use $context-loader to complete this workflow."

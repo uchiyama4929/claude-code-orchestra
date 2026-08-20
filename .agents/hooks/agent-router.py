@@ -8,7 +8,8 @@ Routing rules (checked in order, most specific first):
 - Planning, design, complex code → Codex CLI
 - Codebase understanding / large analysis / external research → Opus subagent
 
-Multimodal files (PDF/video/audio/image) are handled directly by Claude (Opus 4.7+).
+Messages are adapted to the active runtime so Codex never delegates back to
+Codex CLI recursively.
 """
 
 import json
@@ -208,6 +209,12 @@ def detect_agent(prompt: str) -> tuple[str | None, str]:
     return None, ""
 
 
+def is_codex_runtime(data: dict) -> bool:
+    """Detect Codex from the hook payload without relying on a shell wrapper."""
+    model = str(data.get("model", "")).lower()
+    return model.startswith("gpt-") or "codex" in model
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -218,14 +225,21 @@ def main():
             sys.exit(0)
 
         agent, trigger = detect_agent(prompt)
+        codex_runtime = is_codex_runtime(data)
 
         if agent == "fable":
+            route = (
+                "spawn the native `fable-advisor` Codex subagent; its adapter "
+                "coordinates the read-only Fable CLI escalation"
+                if codex_runtime
+                else "use the fable-advisor subagent"
+            )
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "UserPromptSubmit",
                     "additionalContext": (
                         f"[Fable Advisor] Detected '{trigger}' — this may warrant the "
-                        "fable-advisor subagent (rare escalation: design arbitration / "
+                        f"{route} (rare escalation: design arbitration / "
                         "stuck problems / final review of large changes; read-only, never "
                         "implements; notes saved to .agents/docs/reviews/). For routine "
                         "review or implementation, use the normal Codex/team-execute "
@@ -236,44 +250,69 @@ def main():
             print(json.dumps(output))
 
         elif agent == "codex":
+            if codex_runtime:
+                recommendation = (
+                    "use a native Codex subagent such as `general-purpose-opus` "
+                    "or `codex-debugger`. Solve the work directly in this runtime; "
+                    "do not call Codex CLI recursively."
+                )
+            else:
+                recommendation = (
+                    "write the prompt to a file, then `python3 .agents/skills/_shared/"
+                    "codex_consult.py --prompt-file <path> --sandbox read-only` for "
+                    "design decisions, planning, debugging, or complex analysis."
+                )
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "UserPromptSubmit",
                     "additionalContext": (
                         f"[Agent Routing] Detected '{trigger}' — this task may benefit from "
-                        "Codex CLI for planning, design, or complex implementation. Consider: "
-                        "write the prompt to a file, then `python3 .agents/skills/_shared/"
-                        "codex_consult.py --prompt-file <path> --sandbox read-only` for "
-                        "design decisions, planning, debugging, or complex analysis."
+                        "the deep-work route for planning, design, or complex "
+                        f"implementation. Consider: {recommendation}"
                     ),
                 }
             }
             print(json.dumps(output))
 
         elif agent == "codex-plugin":
+            recommendation = (
+                "Use the native Codex reviewer/deep-worker subagent; Claude-only "
+                "`/codex:*` commands do not apply inside Codex."
+                if codex_runtime
+                else (
+                    "Available: `/codex:review` (code review), "
+                    "`/codex:adversarial-review` (design challenge), "
+                    "`/codex:rescue` (task delegation). Add `--background` for "
+                    "async execution, check with `/codex:status`."
+                )
+            )
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "UserPromptSubmit",
                     "additionalContext": (
-                        f"[Codex Plugin] Detected '{trigger}' — consider using Codex Plugin commands. "
-                        "Available: `/codex:review` (code review), "
-                        "`/codex:adversarial-review` (design challenge), "
-                        "`/codex:rescue` (task delegation). "
-                        "Add `--background` for async execution, check with `/codex:status`."
+                        f"[Review Route] Detected '{trigger}'. {recommendation}"
                     ),
                 }
             }
             print(json.dumps(output))
 
         elif agent == "opus-research":
+            route = (
+                "Spawn the native Codex `general-purpose-opus` adapter for "
+                "long-context research, codebase analysis, and investigation."
+                if codex_runtime
+                else (
+                    "Opus subagents provide 1M context plus WebSearch/WebFetch. "
+                    "Use the Agent tool with subagent_type='general-purpose-opus'."
+                )
+            )
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "UserPromptSubmit",
                     "additionalContext": (
                         f"[Opus Research] Detected '{trigger}' — use general-purpose-opus "
-                        "for this task. Opus subagents handle research, codebase analysis, and investigation "
-                        "with 1M context and WebSearch/WebFetch. "
-                        "Use via Agent tool with subagent_type='general-purpose-opus'. "
+                        "for this task. "
+                        f"{route} "
                         "Save results to .agents/docs/research/."
                     ),
                 }

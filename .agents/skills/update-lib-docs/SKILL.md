@@ -1,7 +1,6 @@
 ---
 name: update-lib-docs
 description: Update library documentation in .agents/docs/libraries/ with latest information from web search.
-disable-model-invocation: true
 ---
 
 # Update Library Documentation

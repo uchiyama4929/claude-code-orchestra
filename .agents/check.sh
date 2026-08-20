@@ -159,7 +159,7 @@ check_safe_dirs() {
         return 1
     fi
     local dir
-    for dir in rules skills agents hooks workflows; do
+    for dir in rules skills agents adapters hooks workflows; do
         if ! grep -q "\".agents/${dir}\"" "${update}"; then
             echo "  .agents/${dir} not found in SAFE_DIRS"
             return 1
@@ -290,7 +290,7 @@ check "Bootstrap references" check_bootstrap_references
 check_native_boundaries() {
     local ok=true
     local canonical_dir
-    for canonical_dir in rules skills agents hooks docs logs checkpoints; do
+    for canonical_dir in rules skills agents adapters hooks docs logs checkpoints; do
         local canonical="${ROOT}/.agents/${canonical_dir}"
         if [[ ! -d "${canonical}" || -L "${canonical}" ]]; then
             echo "  Canonical runtime directory is missing or a symlink: .agents/${canonical_dir}"
@@ -314,7 +314,7 @@ check_native_boundaries() {
         fi
     done
 
-    local discovery_dir source name native_link discovery_target
+    local discovery_dir source expected_source name native_link discovery_target
     for discovery_dir in agents skills; do
         if [[ ! -d "${ROOT}/.claude/${discovery_dir}" ]] ||
             [[ -L "${ROOT}/.claude/${discovery_dir}" ]]; then
@@ -326,11 +326,17 @@ check_native_boundaries() {
         for source in "${ROOT}/.agents/${discovery_dir}"/*; do
             [[ -e "${source}" || -L "${source}" ]] || continue
             name="$(basename -- "${source}")"
+            expected_source="${source}"
+            if [[ "${discovery_dir}" == "skills" ]] \
+                && [[ -d "${ROOT}/.agents/adapters/claude/skills/${name}" ]]; then
+                expected_source="${ROOT}/.agents/adapters/claude/skills/${name}"
+            fi
             native_link="${ROOT}/.claude/${discovery_dir}/${name}"
-            discovery_target="../../.agents/${discovery_dir}/${name}"
+            discovery_target="${expected_source#"${ROOT}/"}"
+            discovery_target="../../${discovery_target}"
             if [[ ! -L "${native_link}" ]] ||
                 [[ "$(readlink -- "${native_link}")" != "${discovery_target}" ]] ||
-                [[ "$(resolve_path "${native_link}")" != "$(resolve_path "${source}")" ]]; then
+                [[ "$(resolve_path "${native_link}")" != "$(resolve_path "${expected_source}")" ]]; then
                 echo "  Native discovery entry missing or wrong: .claude/${discovery_dir}/${name}"
                 ok=false
             fi
@@ -340,10 +346,31 @@ check_native_boundaries() {
     local native_entry
     while IFS= read -r native_entry; do
         case "${native_entry}" in
-            config.toml|skills) ;;
+            agents|config.toml|hooks.json|hooks.orchestra.json|skills) ;;
             *) echo "  Unexpected .codex entry: ${native_entry}"; ok=false ;;
         esac
     done < <(find "${ROOT}/.codex" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
+
+    local codex_native="${ROOT}/.codex/agents"
+    local codex_canonical="${ROOT}/.agents/adapters/codex/agents"
+    if [[ ! -d "${codex_native}" || -L "${codex_native}" ]]; then
+        echo "  Codex agent discovery directory is missing or linked as a whole"
+        ok=false
+    else
+        local adapter adapter_name adapter_link adapter_target
+        for adapter in "${codex_canonical}"/*.toml; do
+            [[ -e "${adapter}" ]] || continue
+            adapter_name="$(basename -- "${adapter}")"
+            adapter_link="${codex_native}/${adapter_name}"
+            adapter_target="../../.agents/adapters/codex/agents/${adapter_name}"
+            if [[ ! -L "${adapter_link}" ]] \
+                || [[ "$(readlink -- "${adapter_link}")" != "${adapter_target}" ]] \
+                || [[ "$(resolve_path "${adapter_link}")" != "$(resolve_path "${adapter}")" ]]; then
+                echo "  Codex agent adapter link missing or wrong: .codex/agents/${adapter_name}"
+                ok=false
+            fi
+        done
+    fi
 
     if [[ ! -f "${ROOT}/.claude/settings.json" ]] ||
         ! grep -Fq '.agents/hooks/' "${ROOT}/.claude/settings.json" ||
@@ -358,13 +385,64 @@ check_native_boundaries() {
         echo "  Codex config must reference canonical .agents skills directly"
         ok=false
     fi
+    if [[ ! -f "${ROOT}/.codex/hooks.json" ]] \
+        || ! grep -Fq '.agents/hooks/' "${ROOT}/.codex/hooks.json" \
+        || grep -Fq '.codex/hooks/' "${ROOT}/.codex/hooks.json"; then
+        echo "  Codex hooks must reference canonical .agents hooks directly"
+        ok=false
+    fi
 
     ${ok}
 }
 check "Native runtime boundaries" check_native_boundaries
 
 # --------------------------------------------------------------------------
-# 8) Bundled skill scripts and the docs that invoke them stay in sync:
+# 8) Codex adapters, hooks, and skill UI metadata are structurally complete
+# --------------------------------------------------------------------------
+check_dual_runtime_metadata() {
+    python3 - "${ROOT}" <<'PY'
+import json
+import sys
+import tomllib
+from pathlib import Path
+
+root = Path(sys.argv[1])
+config = tomllib.loads((root / ".codex/config.toml").read_text(encoding="utf-8"))
+if not config.get("features", {}).get("hooks"):
+    raise SystemExit("Codex hooks feature is not enabled")
+
+hooks = json.loads((root / ".codex/hooks.json").read_text(encoding="utf-8"))["hooks"]
+required_events = {"UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStop", "Stop"}
+if not required_events <= hooks.keys():
+    raise SystemExit("Codex hook lifecycle mapping is incomplete")
+
+adapters = root / ".agents/adapters/codex/agents"
+for role in (root / ".agents/agents").glob("*.md"):
+    adapter = adapters / f"{role.stem}.toml"
+    data = tomllib.loads(adapter.read_text(encoding="utf-8"))
+    if data.get("name") != role.stem or not str(data.get("model", "")).startswith("gpt-"):
+        raise SystemExit(f"Invalid Codex adapter: {adapter}")
+
+manual_skills = {"orchestra-init", "plan", "research-lib", "simplify", "tdd", "update-lib-docs"}
+for skill in (root / ".agents/skills").glob("*/SKILL.md"):
+    metadata = skill.parent / "agents/openai.yaml"
+    text = metadata.read_text(encoding="utf-8")
+    if "default_prompt:" not in text or f"${skill.parent.name}" not in text:
+        raise SystemExit(f"Incomplete Codex skill metadata: {metadata}")
+    if "disable-model-invocation" in skill.read_text(encoding="utf-8"):
+        raise SystemExit(f"Claude-only frontmatter remains in shared skill: {skill}")
+    if skill.parent.name in manual_skills:
+        if "allow_implicit_invocation: false" not in text:
+            raise SystemExit(f"Codex manual invocation policy missing: {metadata}")
+        adapter = root / ".agents/adapters/claude/skills" / skill.parent.name / "SKILL.md"
+        if "disable-model-invocation: true" not in adapter.read_text(encoding="utf-8"):
+            raise SystemExit(f"Claude manual invocation adapter missing: {adapter}")
+PY
+}
+check "Dual-runtime metadata" check_dual_runtime_metadata
+
+# --------------------------------------------------------------------------
+# 9) Bundled skill scripts and the docs that invoke them stay in sync:
 #    every script path named in shared markdown exists, and every bundled
 #    script is reachable from at least one document.
 # --------------------------------------------------------------------------

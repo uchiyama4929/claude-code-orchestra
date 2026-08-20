@@ -3,9 +3,9 @@
 **The main agent's default answer to "who does this work?" is *not me*.**
 
 This rule is normative and tool-neutral. It governs *whether* to delegate and
-*to whom*. `.agents/rules/codex-delegation.md` covers the Codex-specific
-triggers and handoff contract; `.agents/rules/tiers.md` defines the tiers; this
-file is the one that decides that delegation happens at all.
+*to whom*. `.agents/rules/runtime-compatibility.md` maps logical routes to the
+current runtime; `.agents/rules/codex-delegation.md` covers cross-runtime Codex
+handoffs; `.agents/rules/tiers.md` defines the tiers.
 
 ## Default Posture
 
@@ -56,7 +56,7 @@ decide:
 | Ambiguous, cross-cutting, security / concurrency / data-integrity / migration-sensitive implementation | `general-purpose-opus` |
 | Codebase-wide investigation, large-context analysis, external research | `general-purpose-opus` |
 | Unknown root cause, failing tests or builds, unexpected behaviour | `codex-debugger` |
-| Architecture, planning, decomposition, complex algorithms, code review | Codex (`codex-system` skill / `.agents/skills/_shared/codex_consult.py`) |
+| Architecture, planning, decomposition, complex algorithms, code review | Native deep route (`codex-system`; Claude may use `codex_consult.py`, Codex works directly) |
 | Repeated failure, conflicting proposals, final review of a large change | `fable-advisor` (rare) |
 
 Escalate rather than retry: a `general-purpose-sonnet` task that comes back

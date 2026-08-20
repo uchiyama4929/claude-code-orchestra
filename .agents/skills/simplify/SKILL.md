@@ -1,7 +1,6 @@
 ---
 name: simplify
 description: Simplify and refactor code while preserving functionality and library constraints.
-disable-model-invocation: true
 ---
 
 # Simplify Code

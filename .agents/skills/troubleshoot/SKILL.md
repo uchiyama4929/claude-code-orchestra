@@ -1,19 +1,20 @@
 ---
 name: troubleshoot
 description: |
-  Diagnose and plan fixes for errors/bugs with Codex-first multi-agent collaboration (Codex + Opus 4.6 + Agent Teams).
-  Codex CLI is consulted in EVERY phase for deep code reasoning, hypothesis evaluation, and fix validation.
-  Phase 1: Error reproduction & context gathering (Opus subagent 1M context + Codex initial analysis + Claude user interaction).
-  Phase 2: Parallel diagnosis (Agent Teams: Root Cause Analyst [Codex-driven] + Impact Investigator [Opus + Codex risk analysis]).
-  Phase 3: Fix plan synthesis, Codex validation & user approval.
-  Fix implementation is handled separately by /team-execute.
+  Diagnose errors and plan fixes with the current runtime's native deep worker
+  and parallel root-cause/impact subagents. Reproduces the failure, validates
+  hypotheses, and produces an approved fix plan; implementation is separate.
 metadata:
-  short-description: Codex-first error/bug diagnosis with Agent Teams (Diagnosis phase)
+  short-description: Cross-runtime error diagnosis and fix planning
 ---
 
 # Troubleshoot
 
-**Codex-first error/bug diagnosis skill leveraging Codex deep reasoning, Opus 1M context, and Agent Teams.**
+> **Runtime mapping:** Follow `.agents/rules/runtime-compatibility.md`. Claude
+> Code uses Agent Teams and external Codex consultation; Codex uses native
+> project subagents and performs Codex diagnosis directly.
+
+**Error and bug diagnosis using native deep reasoning and parallel subagents.**
 
 > Preflight: ensure codex CLI is current (see codex-system skill).
 

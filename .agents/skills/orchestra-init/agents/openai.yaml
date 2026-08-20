@@ -1,0 +1,6 @@
+interface:
+  display_name: "Orchestra Init"
+  short_description: "Help with Orchestra Init tasks"
+  default_prompt: "Use $orchestra-init to complete this workflow."
+policy:
+  allow_implicit_invocation: false

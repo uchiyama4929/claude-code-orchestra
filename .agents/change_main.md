@@ -1,8 +1,9 @@
 # Changing the Main Agent
 
 Read this runbook only when the user explicitly asks to change the main agent.
-Claude Code is the initial default. The active selection is recorded in
-`.agents/STATE.md` under `## Main Agent`.
+The initial default is `Auto`, meaning the runtime the user launched. An
+explicit pinned selection is recorded in `.agents/STATE.md` under
+`## Main Agent`.
 
 ## Meaning of Main Agent
 
@@ -15,8 +16,8 @@ available as executors or advisors when their capabilities fit the task.
 - `.agents/` remains the tool-neutral source of truth.
 - Root `AGENTS.md` remains the concise shared instruction contract, and
   `CLAUDE.md` remains its discovery symlink.
-- Rules, skills, agent definitions, hooks, state, and docs are not copied into
-  product-native directories.
+- Rules, skills, role definitions, hooks, state, and docs are not copied into
+  product-native directories; native agent adapters may link to `.agents/`.
 - Machine-readable native settings remain in each product's required path and
   are not symlinked across incompatible products.
 - Changing the main agent must not silently broaden permissions or remove a
@@ -33,7 +34,8 @@ available as executors or advisors when their capabilities fit the task.
    requirements. Add only the minimum native config needed and point it directly
    to root `AGENTS.md` or `.agents/` where supported; do not invent integration
    surfaces in advance for runtimes that are not being activated.
-4. Update only the `## Main Agent` value in `.agents/STATE.md`.
+4. Update only the `## Main Agent` value in `.agents/STATE.md`. Use `Auto` to
+   select whichever runtime the user launches.
 5. Map main-agent responsibilities to the target runtime. Keep Claude Code,
    Codex, Antigravity, or any former main available as an executor when its
    native runtime remains installed.

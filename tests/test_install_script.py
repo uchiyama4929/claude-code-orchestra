@@ -149,7 +149,7 @@ def test_install_adds_complete_template_without_overwriting_project_version(
     assert result.returncode == 0, result.stderr
     assert (target / "README.md").read_text(encoding="utf-8") == "# Existing project\n"
     assert (target / "VERSION").read_text(encoding="utf-8") == "9.4.1\n"
-    assert (target / ".claude/orchestra-version").read_text(encoding="utf-8") == (
+    assert (target / ".agents/orchestra-version").read_text(encoding="utf-8") == (
         REPO_ROOT / "VERSION"
     ).read_text(encoding="utf-8")
     assert (target / ".agents/INDEX.md").is_file()
@@ -164,12 +164,15 @@ def test_install_adds_complete_template_without_overwriting_project_version(
     assert (target / "CLAUDE.md").is_symlink()
     assert (target / "CLAUDE.md").resolve() == (target / "AGENTS.md").resolve()
     assert {path.name for path in (target / ".claude").iterdir()} == {
-        "orchestra-version",
         "settings.json",
         "agents",
         "skills",
     }
-    assert {path.name for path in (target / ".codex").iterdir()} == {"config.toml"}
+    assert {path.name for path in (target / ".codex").iterdir()} == {
+        "agents",
+        "config.toml",
+        "hooks.json",
+    }
     assert (target / "scripts/install.sh").is_file()
     assert (target / "scripts/update.sh").is_file()
     assert (target / ".claude/settings.json").is_file()
@@ -400,6 +403,124 @@ def test_install_preserves_existing_codex_skills(tmp_path: Path) -> None:
     assert (target / ".codex/config.toml").is_file()
 
 
+def test_install_preserves_native_codex_agents_and_links_orchestra_agents(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "project"
+    init_git_repo(target)
+    existing_agent = target / ".codex/agents/my-agent.toml"
+    existing_agent.parent.mkdir(parents=True)
+    existing_agent.write_text('name = "my-agent"\n', encoding="utf-8")
+
+    result = run_install(target)
+
+    assert result.returncode == 0, result.stderr
+    assert existing_agent.read_text(encoding="utf-8") == 'name = "my-agent"\n'
+    linked = target / ".codex/agents/general-purpose-opus.toml"
+    assert linked.is_symlink()
+    assert (
+        linked.resolve()
+        == (
+            target / ".agents/adapters/codex/agents/general-purpose-opus.toml"
+        ).resolve()
+    )
+
+
+def test_install_preserves_existing_codex_hooks_and_writes_merge_candidate(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "project"
+    init_git_repo(target)
+    hooks = target / ".codex/hooks.json"
+    hooks.parent.mkdir(parents=True)
+    custom_hooks = '{"hooks": {"Stop": []}}\n'
+    hooks.write_text(custom_hooks, encoding="utf-8")
+
+    result = run_install(target)
+
+    assert result.returncode == 0, result.stderr
+    assert hooks.read_text(encoding="utf-8") == custom_hooks
+    candidate = target / ".codex/hooks.orchestra.json"
+    assert candidate.read_text(encoding="utf-8") == (
+        REPO_ROOT / ".codex/hooks.json"
+    ).read_text(encoding="utf-8")
+    assert "hooks.orchestra.json" in result.stdout
+
+
+def test_update_restores_missing_codex_hooks_and_preserves_native_agent(
+    tmp_path: Path,
+) -> None:
+    template = build_template_repo(tmp_path)
+    target = tmp_path / "project"
+    init_git_repo(target)
+    assert run_install(target, script=template / "scripts/install.sh").returncode == 0
+    (target / ".codex/hooks.json").unlink()
+    native_agent = target / ".codex/agents/project-reviewer.toml"
+    native_agent.write_text('name = "project-reviewer"\n', encoding="utf-8")
+
+    result = run_update(target, template)
+
+    assert result.returncode == 0, result.stderr
+    assert (target / ".codex/hooks.json").read_text(encoding="utf-8") == (
+        template / ".codex/hooks.json"
+    ).read_text(encoding="utf-8")
+    assert native_agent.read_text(encoding="utf-8") == 'name = "project-reviewer"\n'
+    assert (target / ".codex/agents/general-purpose-opus.toml").is_symlink()
+
+
+def test_skill_added_to_shared_source_is_discovered_by_both_runtimes(
+    tmp_path: Path,
+) -> None:
+    template = build_template_repo(tmp_path)
+    target = tmp_path / "project"
+    init_git_repo(target)
+    assert run_install(target, script=template / "scripts/install.sh").returncode == 0
+    skill = template / ".agents/skills/runtime-sample"
+    (skill / "agents").mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: runtime-sample\ndescription: Verify shared discovery.\n---\n\n# Runtime Sample\n",
+        encoding="utf-8",
+    )
+    (skill / "agents/openai.yaml").write_text(
+        'interface:\n  display_name: "Runtime Sample"\n'
+        '  short_description: "Verify shared runtime discovery"\n'
+        '  default_prompt: "Use $runtime-sample for this task."\n',
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "-C", str(template), "add", "-A"], check=True)
+    subprocess.run(
+        ["git", "-C", str(template), "commit", "-qm", "add runtime sample skill"],
+        check=True,
+    )
+
+    result = run_update(target, template)
+
+    assert result.returncode == 0, result.stderr
+    shared = target / ".agents/skills/runtime-sample"
+    assert (shared / "SKILL.md").is_file()
+    assert (target / ".claude/skills/runtime-sample").is_symlink()
+    assert (target / ".claude/skills/runtime-sample").resolve() == shared.resolve()
+    assert not (target / ".codex/skills/runtime-sample").exists()
+
+
+def test_update_migrates_manual_claude_skill_to_thin_adapter(tmp_path: Path) -> None:
+    template = build_template_repo(tmp_path)
+    target = tmp_path / "project"
+    init_git_repo(target)
+    assert run_install(target, script=template / "scripts/install.sh").returncode == 0
+    native = target / ".claude/skills/plan"
+    native.unlink()
+    native.symlink_to("../../.agents/skills/plan")
+
+    result = run_update(target, template)
+
+    assert result.returncode == 0, result.stderr
+    assert native.is_symlink()
+    assert (
+        native.resolve() == (target / ".agents/adapters/claude/skills/plan").resolve()
+    )
+
+
 def test_install_preserves_existing_settings_and_writes_merge_candidate(
     tmp_path: Path,
 ) -> None:
@@ -487,9 +608,29 @@ def test_update_uses_namespaced_version_file_and_preserves_project_version(
 
     assert update_result.returncode == 0, update_result.stderr
     assert (target / "VERSION").read_text(encoding="utf-8") == "9.4.1\n"
-    assert (target / ".claude/orchestra-version").read_text(
+    assert (target / ".agents/orchestra-version").read_text(
         encoding="utf-8"
     ) == "0.3.1\n"
+    assert not (target / ".claude/orchestra-version").exists()
+
+
+def test_update_migrates_legacy_claude_version_marker(tmp_path: Path) -> None:
+    template = build_template_repo(tmp_path)
+    target = tmp_path / "project"
+    init_git_repo(target)
+    assert run_install(target, script=template / "scripts/install.sh").returncode == 0
+    legacy = target / ".claude/orchestra-version"
+    legacy.write_text(
+        (target / ".agents/orchestra-version").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (target / ".agents/orchestra-version").unlink()
+
+    result = run_update(target, template)
+
+    assert result.returncode == 0, result.stderr
+    assert (target / ".agents/orchestra-version").is_file()
+    assert not legacy.exists()
 
 
 def test_install_creates_native_discovery_symlinks(tmp_path: Path) -> None:
@@ -574,7 +715,9 @@ def test_update_preserves_codex_skills_and_repairs_native_discovery(
     assert (target / ".claude/agents/general-purpose-opus.md").is_symlink()
     assert (codex_skills / "legacy.md").read_text(encoding="utf-8") == "legacy\n"
     assert {path.name for path in (target / ".codex").iterdir()} == {
+        "agents",
         "config.toml",
+        "hooks.json",
         "skills",
     }
     migrated_settings = claude_settings.read_text(encoding="utf-8")

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Checkpointing"
+  short_description: "Help with Checkpointing tasks"
+  default_prompt: "Use $checkpointing to complete this workflow."

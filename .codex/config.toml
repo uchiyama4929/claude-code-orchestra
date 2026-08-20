@@ -27,6 +27,10 @@ sandbox_mode = "danger-full-access"
 # Feature toggles
 [features]
 skills = true
+hooks = true
+
+[agents]
+max_concurrent_threads_per_session = 4
 
 # Skills configuration - enable project skills
 [[skills.config]]

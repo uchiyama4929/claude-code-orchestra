@@ -1,12 +1,14 @@
-# Codex Handoff Playbook
+# Cross-Runtime Codex Handoff Playbook
 
-This document standardizes how Claude Code hands tasks to Codex so planning/implementation loops stay short and predictable.
+This document standardizes how another runtime hands tasks to Codex. When the
+current runtime is Codex, perform the work natively and do not use the external
+CLI recipes below.
 
 ## Goals
 
 - Reduce retries caused by ambiguous Codex prompts.
-- Keep Claude context small by returning concise summaries.
-- Make Codex responses immediately actionable in Claude workflows.
+- Keep the caller's context small by returning concise summaries.
+- Make Codex responses immediately actionable in the shared workflow.
 
 ## 1) Delegation Decision Matrix
 
@@ -84,9 +86,9 @@ EOF
 python3 .agents/skills/_shared/codex_consult.py --prompt-file "${prompt_file}" --label implement --sandbox danger-full-access
 ```
 
-## 4) Claude-side Compression Rules
+## 4) Caller-side Compression Rules
 
-When Codex finishes, Claude should keep only:
+When Codex finishes, the caller should keep only:
 
 - Top recommendation.
 - 3-5 implementation steps.
@@ -102,9 +104,10 @@ If Codex output is not actionable:
 2. Split into two calls: `read-only` plan → `danger-full-access` implementation.
 3. Ask Codex to compare exactly two options and choose one.
 
-## 6) Codex Plugin Workflows (codex-plugin-cc)
+## 6) Claude-only Codex Plugin Workflows (codex-plugin-cc)
 
-When the `openai/codex-plugin-cc` plugin is installed, use these structured workflows:
+When Claude Code has `openai/codex-plugin-cc` installed, these structured
+workflows are available. They do not apply inside Codex.
 
 ### A. Review Before Shipping
 

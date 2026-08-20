@@ -1,7 +1,6 @@
 ---
 name: research-lib
 description: Research a library and create comprehensive documentation in .agents/docs/libraries/.
-disable-model-invocation: true
 ---
 
 # Research Library

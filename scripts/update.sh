@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# scripts/update.sh — Claude Code Orchestra Template Updater
+# scripts/update.sh — Claude Code and Codex Orchestra Template Updater
 #
 # Fetches the latest version of the claude-code-orchestra template and safely
 # updates local files. Template-owned content is centralized under .agents/;
@@ -17,7 +17,8 @@ set -euo pipefail
 # Constants
 # =============================================================================
 TEMPLATE_REPO="${ORCHESTRA_TEMPLATE_REPO:-https://github.com/uchiyama4929/claude-code-orchestra.git}"
-LOCAL_VERSION_FILE=".claude/orchestra-version"
+LOCAL_VERSION_FILE=".agents/orchestra-version"
+LEGACY_VERSION_FILE=".claude/orchestra-version"
 TEMPLATE_BOUNDARY="@orchestra:template-boundary"
 REPO_BOUNDARY="@orchestra:repo-boundary"
 LEGACY_BOUNDARY="@orchestra:local-boundary"
@@ -30,6 +31,7 @@ SAFE_DIRS=(
     ".agents/rules"
     ".agents/skills"
     ".agents/agents"
+    ".agents/adapters"
     ".agents/hooks"
     ".agents/workflows"
 )
@@ -45,6 +47,7 @@ SAFE_FILES=(
     ".agents/docs/reviews/.gitkeep"
     "scripts/install.sh"
     "scripts/update.sh"
+    "scripts/orchestra"
 )
 
 # Paths that previous template versions installed but no longer ship.
@@ -61,11 +64,14 @@ DEPRECATED_PATHS=(
     ".claude/docs"
     ".claude/hooks"
     ".claude/logs"
+    ".claude/orchestra-version"
 )
 
 NATIVE_DISCOVERY_DIRS=(
     ".claude/agents:.agents/agents"
+    ".claude/skills:.agents/adapters/claude/skills"
     ".claude/skills:.agents/skills"
+    ".codex/agents:.agents/adapters/codex/agents"
 )
 
 LEGACY_NATIVE_LINKS=(
@@ -78,9 +84,11 @@ LEGACY_PROJECT_DIRS=(
     "checkpoints"
 )
 
-# Settings files shown as diff only
+# Native settings are installed when missing and otherwise preserved with a
+# merge candidate. Format: "<native-file>:<candidate-file>".
 SETTINGS_FILES=(
-    ".claude/settings.json"
+    ".claude/settings.json:.claude/settings.orchestra.json"
+    ".codex/hooks.json:.codex/hooks.orchestra.json"
 )
 
 # =============================================================================
@@ -228,6 +236,9 @@ preflight_checks() {
     if [[ -f "${PROJECT_ROOT}/${LOCAL_VERSION_FILE}" ]]; then
         OLD_VERSION="$(tr -d '[:space:]' < "${PROJECT_ROOT}/${LOCAL_VERSION_FILE}")"
         info "Current version: ${BOLD}${OLD_VERSION}${RESET}"
+    elif [[ -f "${PROJECT_ROOT}/${LEGACY_VERSION_FILE}" ]]; then
+        OLD_VERSION="$(tr -d '[:space:]' < "${PROJECT_ROOT}/${LEGACY_VERSION_FILE}")"
+        info "Current version: ${BOLD}${OLD_VERSION}${RESET} (legacy marker)"
     else
         OLD_VERSION="(none)"
         warn "No ${LOCAL_VERSION_FILE} found. This may be a first-time setup."
@@ -470,6 +481,9 @@ sync_safe_files() {
     if [[ -f "${PROJECT_ROOT}/scripts/update.sh" ]]; then
         chmod +x "${PROJECT_ROOT}/scripts/update.sh"
     fi
+    if [[ -f "${PROJECT_ROOT}/scripts/orchestra" ]]; then
+        chmod +x "${PROJECT_ROOT}/scripts/orchestra"
+    fi
 }
 
 # =============================================================================
@@ -662,7 +676,20 @@ link_native_discovery_dirs() {
             name="$(basename -- "${source}")"
             link="${native_dir}/${name}"
             target="../../${canonical_path}/${name}"
+            if [[ "${native_path}" == ".claude/skills" ]] \
+                && [[ "${canonical_path}" == ".agents/adapters/claude/skills" ]] \
+                && [[ -L "${link}" ]] \
+                && [[ "$(readlink -- "${link}")" == "../../.agents/skills/${name}" ]]; then
+                unlink -- "${link}"
+                UPDATED_FILES+=("${native_path}/${name} (migrated to Claude adapter)")
+            fi
             if [[ -L "${link}" && "$(readlink -- "${link}")" == "${target}" ]]; then
+                continue
+            fi
+            if [[ "${native_path}" == ".claude/skills" ]] \
+                && [[ "${canonical_path}" == ".agents/skills" ]] \
+                && [[ -L "${link}" ]] \
+                && [[ "$(readlink -- "${link}")" == "../../.agents/adapters/claude/skills/${name}" ]]; then
                 continue
             fi
             if [[ -e "${link}" || -L "${link}" ]]; then
@@ -696,12 +723,16 @@ migrate_native_settings_paths() {
     info "Migrated .claude hook paths to canonical .agents/hooks paths."
 }
 
-check_settings_files() {
-    header "Checking Settings Files"
+sync_settings_files() {
+    header "Synchronizing Native Settings"
 
-    for file in "${SETTINGS_FILES[@]}"; do
-        local src="${TEMPLATE_DIR}/${file}"
-        local dst="${PROJECT_ROOT}/${file}"
+    local entry file candidate src dst candidate_dst
+    for entry in "${SETTINGS_FILES[@]}"; do
+        file="${entry%%:*}"
+        candidate="${entry#*:}"
+        src="${TEMPLATE_DIR}/${file}"
+        dst="${PROJECT_ROOT}/${file}"
+        candidate_dst="${PROJECT_ROOT}/${candidate}"
 
         if [[ ! -f "${src}" ]]; then
             warn "Template does not contain ${file}, skipping."
@@ -709,8 +740,11 @@ check_settings_files() {
         fi
 
         if [[ ! -f "${dst}" ]]; then
-            info "Local ${file} does not exist. You may want to copy it from the template."
-            info "  cp ${src} ${dst}"
+            mkdir -p "$(dirname "${dst}")"
+            cp -f "${src}" "${dst}.tmp.$$"
+            mv -f "${dst}.tmp.$$" "${dst}"
+            UPDATED_FILES+=("${file}")
+            info "Installed missing ${file}."
             continue
         fi
 
@@ -718,10 +752,11 @@ check_settings_files() {
         settings_diff="$(diff -u "${dst}" "${src}" --label "local" --label "template" 2>/dev/null || true)"
 
         if [[ -n "${settings_diff}" ]]; then
-            warn "${file} differs from template (NOT auto-merged):"
-            echo "${settings_diff}"
-            echo ""
-            warn "Please review and merge ${file} manually."
+            mkdir -p "$(dirname "${candidate_dst}")"
+            cp -f "${src}" "${candidate_dst}.tmp.$$"
+            mv -f "${candidate_dst}.tmp.$$" "${candidate_dst}"
+            UPDATED_FILES+=("${candidate} (merge candidate)")
+            warn "Preserved differing ${file}; review ${candidate}."
         else
             info "${file} matches template. No action needed."
         fi
@@ -771,10 +806,12 @@ print_summary() {
 
     echo ""
 
-    # Check if settings file differed
-    for file in "${SETTINGS_FILES[@]}"; do
-        local src="${TEMPLATE_DIR}/${file}"
-        local dst="${PROJECT_ROOT}/${file}"
+    # Check if settings files still differ after writing merge candidates.
+    local entry file src dst
+    for entry in "${SETTINGS_FILES[@]}"; do
+        file="${entry%%:*}"
+        src="${TEMPLATE_DIR}/${file}"
+        dst="${PROJECT_ROOT}/${file}"
         if [[ -f "${src}" && -f "${dst}" ]]; then
             local settings_diff
             settings_diff="$(diff -q "${dst}" "${src}" 2>/dev/null || true)"
@@ -803,7 +840,7 @@ print_summary() {
 # Main
 # =============================================================================
 main() {
-    echo "${BOLD}Claude Code Orchestra — Template Updater${RESET}"
+    echo "${BOLD}Claude Code and Codex Orchestra — Template Updater${RESET}"
 
     parse_args "$@"
     preflight_checks
@@ -817,7 +854,7 @@ main() {
     remove_legacy_native_links
     link_native_discovery_dirs
     migrate_native_settings_paths
-    check_settings_files
+    sync_settings_files
     update_version
     print_summary
 

@@ -1,7 +1,6 @@
 ---
 name: plan
 description: Create a detailed implementation plan for a feature or task. Use when user wants to plan before coding.
-disable-model-invocation: true
 ---
 
 # Create Implementation Plan

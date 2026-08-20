@@ -1,9 +1,9 @@
-# Claude Code Orchestra — Shared Agent Contract
+# Orchestra — Shared Agent Contract
 
 This file is the always-loaded, tool-neutral operating contract. `.agents/`
-contains the canonical detailed rules and capabilities. Claude Code is the
-default main agent; the active main is recorded in `.agents/STATE.md`. Read
-`.agents/change_main.md` only when the user asks to change it.
+contains the canonical detailed rules and capabilities. The runtime launched by
+the user is the active main unless `.agents/STATE.md` explicitly pins another.
+Read `.agents/change_main.md` only when the user asks to change that default.
 
 ## Mission
 
@@ -21,19 +21,20 @@ logs. Delegate these unless the user explicitly requests otherwise.
 
 ## Agent Topology
 
-- Active main agent (default: Claude Code): owns user interaction, routing,
+- Active main agent (Claude Code or Codex): owns user interaction, routing,
   approvals, integration, and the final response.
-- `general-purpose-sonnet`: routine, well-scoped implementation.
-- `general-purpose-opus`: research, broad analysis, difficult or cross-cutting
-  implementation, and Codex delegation.
-- `codex-debugger`: root-cause analysis for errors and failed checks.
-- Codex CLI / Tier 2 `sol`: design, planning, complex implementation, and deep
-  debugging. Its work must be independently verified.
-- `fable-advisor` / Tier 3 `fable`: rare, read-only arbitration, unblocking, and
-  final review of large changes; never implements.
+- `general-purpose-sonnet`: routine implementation (Claude Sonnet / Codex Luna).
+- `general-purpose-opus`: broad analysis and difficult implementation (Claude
+  Opus / Codex Sol).
+- `codex-debugger`: root-cause analysis (Claude-to-Codex / Codex Terra).
+- Codex deep route / Tier 2 `sol`: design, planning, complex implementation,
+  and deep debugging. Its work must be independently verified.
+- `fable-advisor` / Tier 3 `fable`: rare, read-only arbitration and final review;
+  Codex reaches Claude Fable through the shared peer-CLI wrapper when available.
 
 Full definitions live in `.agents/agents/`; stable role and permission details
-live in `.agents/rules/tiers.md`.
+live in `.agents/rules/tiers.md`. Native mappings and non-equivalent lifecycle
+events are defined in `.agents/rules/runtime-compatibility.md`.
 
 ## Routing Policy
 
@@ -45,8 +46,8 @@ fewer, named gates and skill-bundled lead scripts, and user-facing interaction.
 - Routine, clear implementation → `general-purpose-sonnet`.
 - Ambiguous, security-, concurrency-, data-integrity-, or migration-sensitive
   implementation → `general-purpose-opus`, consulting Codex as needed.
-- Design, planning, trade-offs, and complex implementation → Codex through
-  `general-purpose-opus` or the `codex-system` skill.
+- Design, planning, trade-offs, and complex implementation → the native deep
+  route (`general-purpose-opus` / `codex-system`).
 - External research and large-context analysis → `general-purpose-opus`.
 - Unknown root cause → `codex-debugger`.
 - Repeatedly stuck or high-stakes arbitration → `fable-advisor`.
@@ -69,7 +70,7 @@ Use the canonical workflows in `.agents/skills/`:
 - Project context: `orchestra-init`, `design-tracker`, `checkpointing`, `catchup`.
 - Delivery: `feature`, `plan`, `tdd`, `team-execute`, `troubleshoot`, `simplify`.
 - Investigation: `spike`, `research-lib`, `update-lib-docs`.
-- Codex integration: `codex-system`.
+- Deep reasoning and cross-runtime consultation: `codex-system`.
 
 Each skill's `SKILL.md` is the executable contract. Use a skill when its name or
 trigger matches the request; do not copy its full procedure into this file.
@@ -92,6 +93,7 @@ For implementation, report changed files, commands run, test results, and risks.
 - `PROGRESS.md` and `.agents/checkpoints/`: rolling and detailed progress.
 - `.agents/rules/`: coding, testing, security, routing, tier, and CLI rules.
 - `.agents/agents/`: complete specialist-agent definitions.
+- `.agents/adapters/`: product-native adapters pointing back to shared roles.
 - `.agents/skills/`: complete reusable workflow definitions and helpers.
 - `.agents/hooks/`: shared runtime hooks.
 - `.agents/docs/{research,libraries,plans,reviews}/`: durable findings and reviews.
@@ -121,13 +123,14 @@ task before acting.
 - `CLAUDE.md` is a symlink to this file. `.claude/` and `.codex/` hold their
   native settings plus project-owned extensions.
 - `.claude/agents` and `.claude/skills` are real directories. Orchestra entries
-  inside them are individual links to `../../.agents/{agents,skills}` so existing
-  native entries remain active. `.agents/` remains the shared source of truth;
-  the installer/updater creates missing entry links without replacing collisions.
-- Other native settings point directly at `.agents/` (hooks via
-  `settings.json`, Codex skills via `config.toml` `path=`). Do not mirror rules,
-  hooks, docs, logs, or checkpoints into product-native directories.
+  are individual links to shared roles/skills or thin Claude invocation-policy
+  adapters, so project-native entries remain active. Skill bodies stay canonical
+  under `.agents/skills/`; the installer never replaces unrelated collisions.
+- Codex agents are individual links from `.codex/agents/*.toml` to
+  `.agents/adapters/codex/agents/`. Both runtimes call shared hooks under
+  `.agents/hooks/`; Codex reads skills directly from `.agents/skills/`.
+- Do not mirror rules, hooks, docs, logs, or checkpoints into native directories.
 - Cross-CLI subagent calls go through the shared wrappers
   (`.agents/skills/_shared/cli_consult.py` for Claude Code and Gemini,
   `codex_consult.py` for Codex), never a raw headless shell-out — see
-  `.agents/rules/cli-execution.md`.
+  `.agents/rules/cli-execution.md`. A runtime never invokes itself recursively.

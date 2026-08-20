@@ -7,11 +7,20 @@ SHARED_RUNTIME_DIRS = (
     "rules",
     "skills",
     "agents",
+    "adapters",
     "hooks",
     "docs",
     "logs",
     "checkpoints",
 )
+CLAUDE_MANUAL_SKILLS = {
+    "orchestra-init",
+    "plan",
+    "research-lib",
+    "simplify",
+    "tdd",
+    "update-lib-docs",
+}
 
 REQUIRED_HEADINGS = (
     "## Mission",
@@ -125,7 +134,6 @@ def test_native_runtime_directories_only_keep_native_settings() -> None:
         "settings.json",
         "settings.local.json",
         "settings.orchestra.json",
-        "orchestra-version",
         "agents",
         "skills",
     }
@@ -133,7 +141,7 @@ def test_native_runtime_directories_only_keep_native_settings() -> None:
     codex_real_files = {
         path.name for path in (REPO_ROOT / ".codex").iterdir() if not path.is_symlink()
     }
-    assert codex_real_files == {"config.toml"}
+    assert codex_real_files == {"agents", "config.toml", "hooks.json"}
     for directory in ("agents", "skills"):
         native = REPO_ROOT / ".claude" / directory
         canonical = REPO_ROOT / ".agents" / directory
@@ -141,8 +149,26 @@ def test_native_runtime_directories_only_keep_native_settings() -> None:
         assert not native.is_symlink()
         for source in canonical.iterdir():
             linked = native / source.name
+            expected = source
+            if directory == "skills" and source.name in CLAUDE_MANUAL_SKILLS:
+                expected = (
+                    REPO_ROOT
+                    / ".agents"
+                    / "adapters"
+                    / "claude"
+                    / "skills"
+                    / source.name
+                )
             assert linked.is_symlink()
-            assert linked.resolve() == source.resolve()
+            assert linked.resolve() == expected.resolve()
+    codex_agents = REPO_ROOT / ".codex" / "agents"
+    codex_adapters = REPO_ROOT / ".agents" / "adapters" / "codex" / "agents"
+    assert codex_agents.is_dir()
+    assert not codex_agents.is_symlink()
+    for source in codex_adapters.glob("*.toml"):
+        linked = codex_agents / source.name
+        assert linked.is_symlink()
+        assert linked.resolve() == source.resolve()
     assert not any(path.is_symlink() for path in (REPO_ROOT / ".codex").iterdir())
 
 
@@ -155,6 +181,9 @@ def test_native_settings_reference_canonical_agents_paths_directly() -> None:
     assert ".agents/skills/context-loader" in codex_config
     assert ".agents/skills/design-tracker" in codex_config
     assert ".codex/skills/" not in codex_config
+    codex_hooks = read_repo_file(".codex/hooks.json")
+    assert ".agents/hooks/" in codex_hooks
+    assert ".codex/hooks/" not in codex_hooks
 
 
 def test_shared_runtime_docs_use_canonical_agents_paths() -> None:
@@ -177,6 +206,8 @@ def test_shared_runtime_docs_use_canonical_agents_paths() -> None:
         # proposal has to be able to name a script that does not exist yet.
         # Same rationale as check.sh's logs/checkpoints/research exclusions.
         if reviews_dir in path.parents:
+            continue
+        if path == REPO_ROOT / ".agents/rules/runtime-compatibility.md":
             continue
         content = path.read_text(encoding="utf-8")
         if any(stale_path in content for stale_path in stale_paths):

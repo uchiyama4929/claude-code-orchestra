@@ -1,7 +1,6 @@
 ---
 name: tdd
 description: Implement features using Test-Driven Development (TDD) with Red-Green-Refactor cycle.
-disable-model-invocation: true
 ---
 
 # Test-Driven Development

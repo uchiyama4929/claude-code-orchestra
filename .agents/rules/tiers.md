@@ -13,12 +13,12 @@ and referenced by workflows, skills, and configuration.
 - **Inputs**: User prompt, root `AGENTS.md`, tier definitions, and relevant
   product-native rules.
 - **Outputs**: Direct edits, user-facing responses, delegation calls to other tiers.
-- **Default runtime**: Claude Code. The active runtime is recorded in
-  `.agents/STATE.md`.
-- **Default executor models**: Claude models configured through
-  `.claude/settings.json`.
-- **Tier-1 norm**: Implementation-work subagents run on Sonnet; research and
-  large-scale analysis subagents stay on Opus (1M context window).
+- **Default runtime**: Auto. The user may launch Claude Code or Codex; an
+  explicit preference is recorded in `.agents/STATE.md`.
+- **Default executor models**: Claude uses Sonnet/Opus definitions; Codex uses
+  Luna/Sol adapters under `.agents/adapters/codex/agents/`.
+- **Tier-1 norm**: routine implementation uses the lower-cost worker; research
+  and large-scale analysis use the native deep worker.
 
 ## Tier 2 -- `sol` (Long-Duration Executor)
 
@@ -34,8 +34,8 @@ and referenced by workflows, skills, and configuration.
   (`.agents/rules/codex-delegation.md` section "Prompt Contract").
 - **Outputs**: Structured response (TL;DR / Analysis / Plan / Patch Strategy /
   Validation / Risks); file patches; validation commands.
-- **Model**: Codex CLI model (`CODEX_MODEL` env in `.claude/settings.json`,
-  mirrored in `.codex/config.toml`).
+- **Model**: Codex runs the configured native model directly. Claude Code calls
+  the same Codex model through the shared wrapper when escalation is required.
 - **Guardrails**: See `.agents/rules/cli-execution.md` section "Guardrails (Completion Verification)".
 
 ## Tier 3 -- `fable` (Rare Advisor / Reviewer)
@@ -48,8 +48,8 @@ and referenced by workflows, skills, and configuration.
   `.agents/docs/reviews/` only.
 - **Inputs**: Context summary, competing proposals or stuck-state description.
 - **Outputs**: Judgment, arbitration decision, review notes.
-- **Model**: Claude `fable-advisor` agent
-  (`.agents/agents/fable-advisor.md`).
+- **Model**: Claude uses `fable-advisor` directly. Codex uses its read-only
+  adapter, which calls Claude Fable through `cli_consult.py` when available.
 
 ## Fable Differentiation
 

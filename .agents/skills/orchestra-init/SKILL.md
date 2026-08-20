@@ -1,7 +1,6 @@
 ---
 name: orchestra-init
 description: Analyze project structure, populate .agents/docs/DESIGN.md, and write the thin Repository Identity section in .agents/STATE.md.
-disable-model-invocation: true
 ---
 
 # Initialize Project Configuration

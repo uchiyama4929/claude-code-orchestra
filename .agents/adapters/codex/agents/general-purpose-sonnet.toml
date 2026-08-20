@@ -1,0 +1,10 @@
+name = "general-purpose-sonnet"
+description = "Routine implementation worker for well-scoped changes with clear acceptance checks."
+model = "gpt-5.6-luna"
+model_reasoning_effort = "medium"
+developer_instructions = """
+Read `.agents/agents/general-purpose-sonnet.md` before starting and follow it as
+the shared role contract. The role name is a stable cross-runtime route; this
+Codex adapter uses the model configured above. Use Codex-native tools and
+subagents. Do not translate Claude tool names literally.
+"""

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/orchestra <claude|codex> [ARGS...]
+
+Launch Claude Code or Codex in the same working tree with the shared Orchestra
+state. Runtime selection never switches Git branches.
+EOF
+}
+
+if [[ $# -eq 0 || "$1" == "-h" || "$1" == "--help" ]]; then
+    usage
+    exit 0
+fi
+
+runtime="$1"
+shift
+case "${runtime}" in
+    claude|codex) ;;
+    *)
+        echo "Unknown runtime: ${runtime}" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
+
+if ! command -v "${runtime}" >/dev/null 2>&1; then
+    echo "Runtime is not installed or not on PATH: ${runtime}" >&2
+    exit 127
+fi
+
+export ORCHESTRA_RUNTIME="${runtime}"
+exec "${runtime}" "$@"

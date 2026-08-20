@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install Claude Code Orchestra into an existing Git repository.
+# Install Orchestra for Claude Code and Codex into an existing Git repository.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,6 +8,7 @@ TEMPLATE_OWNED_DIRS=(
     ".agents/rules"
     ".agents/skills"
     ".agents/agents"
+    ".agents/adapters"
     ".agents/hooks"
     ".agents/workflows"
 )
@@ -16,13 +17,16 @@ LEGACY_NATIVE_PATHS=(
     ".claude/docs"
     ".claude/hooks"
     ".claude/logs"
+    ".claude/orchestra-version"
 )
-# Claude Code discovers these entries from .claude/. Individual links let
-# project-owned native entries coexist with Orchestra's canonical .agents data.
+# Native runtimes discover these entries from product-specific directories.
+# Individual links preserve project-owned native entries.
 # Format: "<native-directory>:<canonical-directory>".
 NATIVE_DISCOVERY_DIRS=(
     ".claude/agents:.agents/agents"
+    ".claude/skills:.agents/adapters/claude/skills"
     ".claude/skills:.agents/skills"
+    ".codex/agents:.agents/adapters/codex/agents"
 )
 TEMPLATE_OWNED_FILES=(
     ".codex/config.toml"
@@ -35,6 +39,7 @@ TEMPLATE_OWNED_FILES=(
     ".agents/docs/reviews/.gitkeep"
     "scripts/install.sh"
     "scripts/update.sh"
+    "scripts/orchestra"
 )
 PROJECT_FILES_IF_MISSING=(
     ".agents/STATE.md"
@@ -44,6 +49,7 @@ PROJECT_FILES_IF_MISSING=(
 GITIGNORE_ENTRIES=(
     ".claude/settings.local.json"
     ".claude/settings.orchestra.json"
+    ".codex/hooks.orchestra.json"
     "CLAUDE.local.md"
     ".agents/logs/"
     ".agents/checkpoints/"
@@ -69,7 +75,7 @@ usage() {
     cat <<'EOF'
 Usage: scripts/install.sh [OPTIONS] [TARGET_DIR]
 
-Install Claude Code Orchestra into an existing Git repository.
+Install Orchestra for Claude Code and Codex into an existing Git repository.
 
 Options:
   -y, --yes    Skip confirmation prompts
@@ -79,8 +85,8 @@ Options:
 Existing AGENTS.md and CLAUDE.md content is preserved in .agents/STATE.md.
 The template installs the shared AGENTS.md contract and makes CLAUDE.md a relative
 symlink to it. Existing
-.claude/settings.json is never overwritten; a merge candidate is written to
-.claude/settings.orchestra.json when the files differ.
+Native settings are never overwritten. Differing Orchestra settings are written
+to `.claude/settings.orchestra.json` or `.codex/hooks.orchestra.json`.
 EOF
 }
 
@@ -121,7 +127,7 @@ require_source_paths() {
     local path
     for path in "${TEMPLATE_OWNED_DIRS[@]}" \
         "${TEMPLATE_OWNED_FILES[@]}" "${PROJECT_FILES_IF_MISSING[@]}" \
-        "AGENTS.md" "CLAUDE.md" ".claude/settings.json" \
+        "AGENTS.md" "CLAUDE.md" ".claude/settings.json" ".codex/hooks.json" \
         "VERSION"; do
         if [[ ! -e "${SOURCE_ROOT}/${path}" && ! -L "${SOURCE_ROOT}/${path}" ]]; then
             error "Template source is incomplete: ${path} is missing."
@@ -160,7 +166,10 @@ validate_destination_paths() {
         ".claude/skills"
         ".claude/settings.json"
         ".claude/settings.orchestra.json"
-        ".claude/orchestra-version"
+        ".agents/orchestra-version"
+        ".codex/agents"
+        ".codex/hooks.json"
+        ".codex/hooks.orchestra.json"
         ".gitignore"
     )
     for path in "${paths[@]}"; do
@@ -190,7 +199,9 @@ validate_project_files() {
         "AGENTS.md"
         "CLAUDE.md"
         ".claude/settings.json"
+        ".codex/hooks.json"
         ".agents/STATE.md"
+        ".agents/orchestra-version"
         ".agents/docs/DESIGN.md"
         ".gitignore"
     )
@@ -302,7 +313,8 @@ copy_owned_paths() {
         mv -f "${temporary}" "${destination}"
         info "Installed ${path}"
     done
-    chmod +x "${TARGET_ROOT}/scripts/install.sh" "${TARGET_ROOT}/scripts/update.sh"
+    chmod +x "${TARGET_ROOT}/scripts/install.sh" \
+        "${TARGET_ROOT}/scripts/update.sh" "${TARGET_ROOT}/scripts/orchestra"
 }
 
 remove_legacy_native_paths() {
@@ -345,7 +357,19 @@ link_native_discovery_dirs() {
             name="$(basename -- "${source}")"
             link="${native_dir}/${name}"
             target="../../${canonical_path}/${name}"
+            if [[ "${native_path}" == ".claude/skills" ]] \
+                && [[ "${canonical_path}" == ".agents/adapters/claude/skills" ]] \
+                && [[ -L "${link}" ]] \
+                && [[ "$(readlink -- "${link}")" == "../../.agents/skills/${name}" ]]; then
+                unlink -- "${link}"
+            fi
             if [[ -L "${link}" && "$(readlink -- "${link}")" == "${target}" ]]; then
+                continue
+            fi
+            if [[ "${native_path}" == ".claude/skills" ]] \
+                && [[ "${canonical_path}" == ".agents/skills" ]] \
+                && [[ -L "${link}" ]] \
+                && [[ "$(readlink -- "${link}")" == "../../.agents/adapters/claude/skills/${name}" ]]; then
                 continue
             fi
             if [[ -e "${link}" || -L "${link}" ]]; then
@@ -403,33 +427,40 @@ install_agent_files() {
     info "Installed shared AGENTS.md and preserved existing instructions in .agents/STATE.md"
 }
 
-install_settings() {
-    local source="${SOURCE_ROOT}/.claude/settings.json"
-    local destination="${TARGET_ROOT}/.claude/settings.json"
-    local candidate="${TARGET_ROOT}/.claude/settings.orchestra.json"
-    mkdir -p "${TARGET_ROOT}/.claude"
+install_settings_file() {
+    local relative="$1"
+    local candidate_relative="$2"
+    local source="${SOURCE_ROOT}/${relative}"
+    local destination="${TARGET_ROOT}/${relative}"
+    local candidate="${TARGET_ROOT}/${candidate_relative}"
+    mkdir -p "$(dirname "${destination}")"
 
     if [[ ! -f "${destination}" ]]; then
         cp -a "${source}" "${destination}"
-        info "Installed .claude/settings.json"
+        info "Installed ${relative}"
         return 0
     fi
     if cmp -s "${source}" "${destination}"; then
-        info "Preserved matching .claude/settings.json"
+        info "Preserved matching ${relative}"
         return 0
     fi
 
     cp -a "${source}" "${candidate}.tmp.$$"
     mv -f "${candidate}.tmp.$$" "${candidate}"
-    warn "Preserved existing .claude/settings.json."
-    warn "Merge required Orchestra settings from .claude/settings.orchestra.json, then delete the candidate."
+    warn "Preserved existing ${relative}."
+    warn "Merge required Orchestra settings from ${candidate_relative}, then delete the candidate."
+}
+
+install_settings() {
+    install_settings_file ".claude/settings.json" ".claude/settings.orchestra.json"
+    install_settings_file ".codex/hooks.json" ".codex/hooks.orchestra.json"
 }
 
 install_version_marker() {
-    local destination="${TARGET_ROOT}/.claude/orchestra-version"
+    local destination="${TARGET_ROOT}/.agents/orchestra-version"
     cp -a "${SOURCE_ROOT}/VERSION" "${destination}.tmp.$$"
     mv -f "${destination}.tmp.$$" "${destination}"
-    info "Recorded Orchestra version in .claude/orchestra-version"
+    info "Recorded Orchestra version in .agents/orchestra-version"
 }
 
 ensure_gitignore_entries() {
@@ -447,19 +478,20 @@ ensure_gitignore_entries() {
     if [[ -s "${gitignore}" ]]; then
         echo "" >> "${gitignore}"
     fi
-    echo "# Claude Code Orchestra local state" >> "${gitignore}"
+    echo "# Orchestra local state" >> "${gitignore}"
     printf '%s\n' "${missing[@]}" >> "${gitignore}"
     info "Updated .gitignore with Orchestra local-state paths"
 }
 
 print_summary() {
     echo ""
-    info "Claude Code Orchestra installation complete."
+    info "Claude Code and Codex Orchestra installation complete."
     info "Project files such as README.md and VERSION were preserved."
-    if [[ -f "${TARGET_ROOT}/.claude/settings.orchestra.json" ]]; then
-        warn "Complete the settings merge before starting Claude Code."
+    if [[ -f "${TARGET_ROOT}/.claude/settings.orchestra.json" ]] \
+        || [[ -f "${TARGET_ROOT}/.codex/hooks.orchestra.json" ]]; then
+        warn "Complete the native settings merge before starting an agent runtime."
     else
-        info "Next: start Claude Code and run /orchestra-init."
+        info "Next: run scripts/orchestra claude or scripts/orchestra codex, then invoke orchestra-init."
     fi
 }
 

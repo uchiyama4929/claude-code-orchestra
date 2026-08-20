@@ -1,19 +1,25 @@
 ---
 name: codex-system
 description: |
-  Codex CLI handles planning, design, and complex code implementation.
-  Use for: architecture design, implementation planning, complex algorithms,
-  debugging (root cause analysis), trade-off evaluation, code review.
-  External research is NOT Codex's job — use general-purpose-opus instead.
+  Deep-reasoning route for planning, design, complex implementation, debugging,
+  trade-off evaluation, and code review. Codex works natively; another runtime
+  reaches Codex through the shared wrapper. External research belongs to the
+  general-purpose-opus route.
   Explicit triggers: "plan", "design", "architecture", "think deeper",
   "analyze", "debug", "complex", "optimize".
 metadata:
-  short-description: Codex CLI — planning, design, and complex implementation
+  short-description: Native or cross-runtime deep reasoning with Codex
 ---
 
 # Codex System — Planning, Design & Complex Implementation
 
-**Codex CLI handles planning, design, and complex code implementation.**
+**Codex handles planning, design, and complex implementation natively or as a
+peer CLI, depending on the current runtime.**
+
+> **Runtime gate:** Inside Codex, perform the requested reasoning directly or
+> spawn a native Codex project agent. Do not run `codex_consult.py` or a
+> `/codex:*` Claude plugin command recursively. The wrapper and plugin recipes
+> below apply only when another runtime is consulting Codex.
 
 > **Preflight (SSOT):** Update CLIs before each session — `claude update && npm install -g @openai/codex@latest`. Releases drift frequently (model names, flags, sandbox semantics). Other skills reference this line instead of repeating it.
 > **Delegation policy (when to delegate)**: `.agents/rules/codex-delegation.md`

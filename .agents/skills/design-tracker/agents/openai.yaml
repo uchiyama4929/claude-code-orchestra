@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Tracker"
+  short_description: "Help with Design Tracker tasks"
+  default_prompt: "Use $design-tracker to complete this workflow."

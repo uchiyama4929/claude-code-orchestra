@@ -23,7 +23,11 @@ def test_python_save_hook_checks_without_rewriting(monkeypatch, tmp_path: Path) 
     python_file.write_text("value=1\n", encoding="utf-8")
     commands: list[list[str]] = []
 
-    monkeypatch.setattr(hook, "get_file_path", lambda: str(python_file))
+    monkeypatch.setattr(
+        hook,
+        "get_hook_input",
+        lambda: {"tool_name": "Edit", "tool_input": {"file_path": str(python_file)}},
+    )
     monkeypatch.setattr(
         hook,
         "run_command",
@@ -39,3 +43,24 @@ def test_python_save_hook_checks_without_rewriting(monkeypatch, tmp_path: Path) 
         ["uv", "run", "--no-sync", "ty", "check", str(python_file)],
     ]
     assert python_file.read_text(encoding="utf-8") == "value=1\n"
+
+
+def test_codex_apply_patch_extracts_only_changed_python_files() -> None:
+    hook = load_hook()
+    payload = {
+        "tool_name": "apply_patch",
+        "tool_input": {
+            "patch": (
+                "*** Begin Patch\n"
+                "*** Update File: src/example.py\n"
+                "@@\n-old\n+new\n"
+                "*** Add File: src/added.py\n"
+                "+value = 1\n"
+                "*** Update File: README.md\n"
+                "@@\n-old\n+new\n"
+                "*** End Patch\n"
+            )
+        },
+    }
+
+    assert hook.get_file_paths(payload) == ["src/example.py", "src/added.py"]

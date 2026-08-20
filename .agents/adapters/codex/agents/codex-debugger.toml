@@ -1,0 +1,10 @@
+name = "codex-debugger"
+description = "Root-cause debugger for test, build, runtime, and integration failures."
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"
+developer_instructions = """
+Read `.agents/agents/codex-debugger.md` before starting and follow it as the
+shared role contract. Analyze the failure directly with Codex-native tools.
+The shared role's external Codex consultation path is for Claude Code only;
+never invoke Codex CLI recursively from this adapter.
+"""

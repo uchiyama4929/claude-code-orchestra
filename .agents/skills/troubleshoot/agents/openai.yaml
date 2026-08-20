@@ -1,0 +1,4 @@
+interface:
+  display_name: "Troubleshoot"
+  short_description: "Help with Troubleshoot tasks"
+  default_prompt: "Use $troubleshoot to complete this workflow."

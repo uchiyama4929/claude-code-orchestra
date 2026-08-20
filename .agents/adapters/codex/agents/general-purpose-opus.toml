@@ -1,0 +1,10 @@
+name = "general-purpose-opus"
+description = "Deep worker for broad research, difficult implementation, and cross-cutting analysis."
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
+developer_instructions = """
+Read `.agents/agents/general-purpose-opus.md` before starting and follow it as
+the shared role contract. The role name is a stable cross-runtime route; this
+Codex adapter uses the model configured above. Solve Codex work directly with
+native tools and subagents. Never invoke Codex CLI recursively.
+"""

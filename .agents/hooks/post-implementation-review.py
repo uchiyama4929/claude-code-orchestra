@@ -9,6 +9,7 @@ code has been written.
 import hashlib
 import json
 import os
+import re
 import sys
 
 # Input validation constants
@@ -108,30 +109,51 @@ def main():
         data = json.load(sys.stdin)
         tool_name = data.get("tool_name", "")
 
-        # Only process Write/Edit tools
-        if tool_name not in ["Write", "Edit"]:
+        # Process Claude writes and Codex apply_patch calls.
+        if tool_name not in ["Write", "Edit", "apply_patch"]:
             sys.exit(0)
 
         tool_input = data.get("tool_input", {})
-        file_path = tool_input.get("file_path", "")
-        content = tool_input.get("content", "") or tool_input.get("new_string", "")
+        content = (
+            tool_input.get("content", "")
+            or tool_input.get("new_string", "")
+            or tool_input.get("patch", "")
+        )
+        file_paths = [tool_input.get("file_path", "")]
+        if tool_name == "apply_patch" and isinstance(content, str):
+            file_paths = re.findall(
+                r"^\*\*\* (?:Add|Update) File: (.+)$",
+                content,
+                re.MULTILINE,
+            )
+        file_paths = [path for path in file_paths if isinstance(path, str) and path]
 
         # Validate input
-        if not validate_input(file_path, content):
+        if (
+            not file_paths
+            or not isinstance(content, str)
+            or any(not validate_input(file_path, content) for file_path in file_paths)
+        ):
             sys.exit(0)
 
         # Skip non-source files
-        if not any(
-            file_path.endswith(ext)
-            for ext in [".py", ".ts", ".js", ".tsx", ".jsx", ".go", ".rs"]
-        ):
+        source_paths = [
+            file_path
+            for file_path in file_paths
+            if any(
+                file_path.endswith(ext)
+                for ext in [".py", ".ts", ".js", ".tsx", ".jsx", ".go", ".rs"]
+            )
+        ]
+        if not source_paths:
             sys.exit(0)
 
         # Load and update state (namespaced per project + session)
         state_file = get_state_file_path(data)
         state = load_state(state_file)
-        if file_path not in state["files_changed"]:
-            state["files_changed"].append(file_path)
+        for file_path in source_paths:
+            if file_path not in state["files_changed"]:
+                state["files_changed"].append(file_path)
         state["total_lines"] += count_lines(content)
         save_state(state, state_file)
 
@@ -142,14 +164,23 @@ def main():
             state["review_suggested"] = True
             save_state(state, state_file)
 
+            model = str(data.get("model", "")).lower()
+            codex_runtime = model.startswith("gpt-") or "codex" in model
+            recommendation = (
+                "Spawn a native read-only Codex reviewer; do not invoke Codex CLI recursively."
+                if codex_runtime
+                else (
+                    "Use Task tool with subagent_type='general-purpose-opus' "
+                    "to consult Codex with git diff and preserve main context."
+                )
+            )
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "PostToolUse",
                     "additionalContext": (
                         f"[Code Review Suggestion] {reason} in this session. "
-                        "Consider having Codex review the implementation. "
-                        "**Recommended**: Use Task tool with subagent_type='general-purpose-opus' "
-                        "to consult Codex with git diff and preserve main context."
+                        "Consider an independent review of the implementation. "
+                        f"**Recommended**: {recommendation}"
                     ),
                 }
             }

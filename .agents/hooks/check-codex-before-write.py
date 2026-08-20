@@ -117,18 +117,27 @@ def main():
         should_suggest, reason = should_suggest_codex(file_path, content)
 
         if should_suggest:
+            model = str(data.get("model", "")).lower()
+            codex_runtime = model.startswith("gpt-") or "codex" in model
+            recommendation = (
+                "Use a native Codex subagent such as `general-purpose-opus`; "
+                "do not invoke Codex CLI recursively."
+                if codex_runtime
+                else (
+                    "Use Task tool with subagent_type='general-purpose-opus' "
+                    "to preserve main context. (Direct call OK for quick questions: "
+                    "write the prompt to a file, then `python3 .agents/skills/_shared/"
+                    "codex_consult.py --prompt-file <path> --sandbox read-only`)"
+                )
+            )
             # Return additional context to Claude
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "additionalContext": (
                         f"[Codex Consultation Reminder] {reason}. "
-                        "Consider consulting Codex before making this change. "
-                        "**Recommended**: Use Task tool with subagent_type='general-purpose-opus' "
-                        "to preserve main context. "
-                        "(Direct call OK for quick questions: write the prompt to a file, then "
-                        "`python3 .agents/skills/_shared/codex_consult.py --prompt-file <path> "
-                        "--sandbox read-only`)"
+                        "Consider using the deep-work route before making this change. "
+                        f"**Recommended**: {recommendation}"
                     ),
                 }
             }

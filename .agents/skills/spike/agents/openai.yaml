@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spike"
+  short_description: "Help with Spike tasks and workflows"
+  default_prompt: "Use $spike to complete this workflow."

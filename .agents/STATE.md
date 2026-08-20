@@ -2,7 +2,7 @@
 
 ## Main Agent
 
-Claude Code
+Auto (current runtime: Claude Code or Codex)
 
 ## Repository Identity
 

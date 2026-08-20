@@ -1,21 +1,22 @@
 ---
 name: team-execute
 description: |
-  Two-phase Agent Teams execution — replaces the old /team-implement and /team-review skills.
-  Phase 1 IMPLEMENT (formerly /team-implement): parallel implementation with teammates per
-  module/layer, file-ownership separation, and a shared task list with dependencies.
-  Run after /feature plan approval.
-  Phase 2 REVIEW (formerly /team-review): specialized reviewers (security, quality,
-  test coverage) review the changes from different perspectives in parallel.
-  Pass --review-only to skip Phase 1 and review existing changes
-  (after manual or Codex implementation).
+  Execute an approved plan with the current runtime's native parallel
+  subagents. Phase 1 separates implementation ownership by module; Phase 2 runs
+  security, quality, and test review. Use --review-only to skip implementation.
 metadata:
-  short-description: Parallel implementation + parallel review with Agent Teams
+  short-description: Cross-runtime parallel implementation and review
 ---
 
 # Team Execute
 
-**Parallel implementation followed by parallel review, both via Agent Teams. Executes the plan approved in `/feature`.**
+> **Runtime mapping:** "Agent Teams" means the current runtime's native
+> parallel-subagent mechanism. Claude Code uses its team/task operations; Codex
+> spawns project agents from `.codex/agents/*.toml`. Preserve the same ownership,
+> dependency, review, and work-log contracts in both runtimes.
+
+**Parallel implementation followed by parallel review using the current
+runtime's native subagents. Executes the plan approved in `feature`.**
 
 > Preflight: ensure codex CLI is current (see codex-system skill).
 

@@ -1,6 +1,10 @@
 # Codex Delegation Rule
 
-**Codex CLI handles planning, design, and complex code implementation.**
+**Codex handles planning, design, and complex code implementation.**
+
+When the current runtime is Codex, use native reasoning and native subagents;
+do not invoke `codex_consult.py`. The CLI handoff instructions in this rule
+apply when Claude Code or another runtime delegates work to Codex.
 
 > Scope: this rule decides *when Codex specifically*. Whether the main agent may
 > keep a task at all is decided first by `.agents/rules/delegation.md`, whose
@@ -45,8 +49,8 @@ Do NOT delegate to Codex when:
 - **Routine, well-scoped implementation** → `general-purpose-sonnet`
 - **Difficult implementation** (ambiguous architecture, cross-cutting invariants,
   security/concurrency/data-integrity risk, or repeated failure) → `general-purpose-opus`
-- **Codebase analysis** → `general-purpose-opus` (Opus 1M context)
-- **External information retrieval / web research** → `general-purpose-opus` (WebSearch/WebFetch)
+- **Codebase analysis** → the native `general-purpose-opus` deep-worker route
+- **External information retrieval / web research** → the native deep-worker route
 
 ## Prompt Contract (Always Include)
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Team Execute"
+  short_description: "Help with Team Execute tasks"
+  default_prompt: "Use $team-execute to complete this workflow."

@@ -1,20 +1,20 @@
 ---
 name: feature
 description: |
-  Unified feature planning & implementation skill — replaces the old /add-feature and
-  /start-feature skills (both trigger phrases still apply here).
-  MODE=existing (formerly /add-feature): add a feature to an established codebase with
-  Codex-first collaboration — Codex is consulted in every phase for scope analysis,
-  architecture design, implementation planning, and validation.
-  MODE=greenfield (formerly /start-feature): start a large or new feature that requires
-  external research — Agent Teams (Researcher + Architect) do parallel research & design.
-  Both modes share Phase 3 complexity routing (SIMPLE: Codex direct, MODERATE: Codex +
-  /team-execute --review-only, COMPLEX: /team-execute).
+  Plan and implement features in existing or greenfield codebases. Uses the
+  current runtime's native deep worker and parallel subagents for scope,
+  research, architecture, planning, implementation, and validation, then routes
+  by complexity to focused work or team-execute.
 metadata:
-  short-description: Feature planning with existing/greenfield modes and complexity routing
+  short-description: Cross-runtime feature planning and complexity routing
 ---
 
 # Feature
+
+> **Runtime mapping:** Follow `.agents/rules/runtime-compatibility.md`. Claude
+> Code uses Agent Teams and `codex_consult.py`; Codex uses native project
+> subagents and performs Codex analysis directly. Do not recursively launch the
+> current runtime when a later step names a product-specific mechanism.
 
 **One entry point for feature work, two modes:**
 
