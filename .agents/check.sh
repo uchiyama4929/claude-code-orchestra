@@ -307,7 +307,7 @@ check_native_boundaries() {
     local forbidden_path
     for forbidden_path in \
         .claude/checkpoints .claude/docs .claude/hooks \
-        .claude/logs .claude/rules .codex/AGENTS.md; do
+        .claude/logs .codex/AGENTS.md; do
         if [[ -e "${ROOT}/${forbidden_path}" || -L "${ROOT}/${forbidden_path}" ]]; then
             echo "  Shared content remains in a native directory: ${forbidden_path}"
             ok=false
@@ -338,13 +338,6 @@ check_native_boundaries() {
     done
 
     local native_entry
-    while IFS= read -r native_entry; do
-        case "${native_entry}" in
-            settings.json|settings.local.json|settings.orchestra.json|orchestra-version) ;;
-            agents|skills) ;;
-            *) echo "  Unexpected .claude entry: ${native_entry}"; ok=false ;;
-        esac
-    done < <(find "${ROOT}/.claude" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
     while IFS= read -r native_entry; do
         case "${native_entry}" in
             config.toml|skills) ;;

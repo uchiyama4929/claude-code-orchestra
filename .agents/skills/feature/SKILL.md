@@ -232,7 +232,7 @@ Verify `"ok": true` and `"result": "applied"`. `--require-change` makes a
 `no-op` result (every row a duplicate, or an empty payload) exit `2`, so this
 step can never report "recorded" for a run that wrote nothing. Exit `1` is a
 bad input schema; exit `2` DESIGN.md is missing or structurally invalid (run
-`/init`) or the run was a no-op; exit `3` DESIGN.md changed under you
+`/orchestra-init`) or the run was a no-op; exit `3` DESIGN.md changed under you
 (concurrent modification) or the write failed — re-read DESIGN.md, drop what the
 other writer already recorded, and re-run the dry-run before applying again.
 

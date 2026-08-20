@@ -1,4 +1,4 @@
-"""Pin the reduced contract of init/detect_stack.py.
+"""Pin the reduced contract of orchestra-init/detect_stack.py.
 
 This script had no tests, which is how it acquired the two defects that made it
 the audit's counter-example to "script everything": ``if "ty" in text`` turned a
@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = REPO_ROOT / ".agents" / "skills" / "init" / "detect_stack.py"
+SCRIPT = REPO_ROOT / ".agents" / "skills" / "orchestra-init" / "detect_stack.py"
 
 
 def run(root: Path, *extra: str) -> tuple[int, dict, str]:
@@ -134,7 +134,7 @@ def test_malformed_package_json_is_a_warning_not_a_crash(project: Path) -> None:
 
 def test_no_commands_are_inferred(project: Path) -> None:
     """The script reports evidence and never a command line. ``commands`` was
-    the field ``init/SKILL.md`` told the agent to copy into DESIGN.md."""
+    the field ``orchestra-init/SKILL.md`` told the agent to copy into DESIGN.md."""
     (project / "pyproject.toml").write_text(
         '[project]\nname = "demo"\n\n[tool.ruff]\nline-length = 88\n',
         encoding="utf-8",

@@ -41,6 +41,7 @@ SAFE_FILES=(
     ".agents/change_main.md"
     ".agents/docs/CODEX_HANDOFF_PLAYBOOK.md"
     ".agents/docs/libraries/.gitkeep"
+    ".agents/docs/plans/.gitkeep"
     ".agents/docs/reviews/.gitkeep"
     "scripts/install.sh"
     "scripts/update.sh"
@@ -60,12 +61,15 @@ DEPRECATED_PATHS=(
     ".claude/docs"
     ".claude/hooks"
     ".claude/logs"
-    ".claude/rules"
 )
 
 NATIVE_DISCOVERY_DIRS=(
     ".claude/agents:.agents/agents"
     ".claude/skills:.agents/skills"
+)
+
+LEGACY_NATIVE_LINKS=(
+    ".claude/skills/init:../../.agents/skills/init"
 )
 
 LEGACY_PROJECT_DIRS=(
@@ -613,6 +617,19 @@ repair_claude_entrypoint() {
     UPDATED_FILES+=("CLAUDE.md -> AGENTS.md")
 }
 
+remove_legacy_native_links() {
+    local entry native_path expected_target link
+    for entry in "${LEGACY_NATIVE_LINKS[@]}"; do
+        native_path="${entry%%:*}"
+        expected_target="${entry#*:}"
+        link="${PROJECT_ROOT}/${native_path}"
+        if [[ -L "${link}" ]] && [[ "$(readlink -- "${link}")" == "${expected_target}" ]]; then
+            unlink -- "${link}"
+            UPDATED_FILES+=("REMOVED: ${native_path}")
+        fi
+    done
+}
+
 # Keep project-native entries active while exposing Orchestra entries from the
 # canonical .agents directories.
 link_native_discovery_dirs() {
@@ -797,6 +814,7 @@ main() {
     sync_safe_dirs
     sync_safe_files
     repair_claude_entrypoint
+    remove_legacy_native_links
     link_native_discovery_dirs
     migrate_native_settings_paths
     check_settings_files

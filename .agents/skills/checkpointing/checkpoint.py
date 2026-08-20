@@ -874,7 +874,7 @@ A "skill" is a repeatable workflow pattern that can be triggered by specific phr
 3. **Check against existing skills** in `.agents/skills/`:
    - feature, team-execute, spike, plan, tdd
    - simplify, codex-system, design-tracker, checkpointing
-   - research-lib, update-lib-docs, catchup, init, troubleshoot
+   - research-lib, update-lib-docs, catchup, orchestra-init, troubleshoot
    - If pattern matches an existing skill, note it but still report
 
 4. **Quality criteria**:

@@ -79,6 +79,15 @@ def test_root_agents_catalogs_every_bundled_agent_and_skill() -> None:
     assert all(f"`{name}`" in content for name in agent_names | skill_names)
 
 
+def test_project_init_skill_does_not_shadow_claude_builtin() -> None:
+    assert not (REPO_ROOT / ".agents/skills/init").exists()
+    skill = read_repo_file(".agents/skills/orchestra-init/SKILL.md")
+
+    assert "name: orchestra-init" in skill
+    assert "`orchestra-init`" in read_repo_file("AGENTS.md")
+    assert "/orchestra-init" in read_repo_file("README.md")
+
+
 def test_claude_md_is_symlink_to_root_agents_md() -> None:
     claude_md = REPO_ROOT / "CLAUDE.md"
 
@@ -191,7 +200,7 @@ def test_state_tools_write_canonical_agents_state_file() -> None:
         ".agents/skills/_shared/append_state_block.py",
         ".agents/skills/checkpointing/checkpoint.py",
         ".agents/skills/checkpointing/refresh_guard.py",
-        ".agents/skills/init/detect_stack.py",
+        ".agents/skills/orchestra-init/detect_stack.py",
     )
     for tool_path in tool_paths:
         content = read_repo_file(tool_path)

@@ -250,7 +250,7 @@ CONTRACTS: dict[str, Resolver] = {
     ),
     # .agents/docs/DESIGN.md — the document install.sh seeds into every project
     # and the structure update_design.py's typed targets locate by heading, so
-    # a DESIGN.md missing one of these makes /init or /design-tracker exit 2.
+    # a DESIGN.md missing one of these makes /orchestra-init or /design-tracker exit 2.
     # Only the `##` sections are required: the `### Agent Roles` table is
     # meaningful for an agent-orchestration project and absent from an ordinary
     # one, and `### In Scope` / `### Out of Scope` are a rendering choice inside
@@ -274,9 +274,9 @@ CONTRACTS: dict[str, Resolver] = {
     # append_state_block.py and refresh_guard.py both hard-enforce (exactly one
     # occurrence, or exit 2), and `## Main Agent`, the one fact the file exists
     # to carry (load_context.py and collect_repo_state.py read it by heading).
-    # `## Repository Identity` is deliberately *not* required: it is /init-owned
+    # `## Repository Identity` is deliberately *not* required: it is /orchestra-init-owned
     # and append_state_block.py inserts it when absent, so a state file that has
-    # not been through /init is legitimately without it. Working blocks
+    # not been through /orchestra-init is legitimately without it. Working blocks
     # (`## Current Feature`, …) come and go and are never required.
     "state-doc": _static(["Main Agent", "Progress Tracker"]),
 }

@@ -344,7 +344,7 @@ SUCCESS_EXEMPT: dict[Path, str] = {
     SKILLS_DIR / "simplify" / "simplify_gate.py": "tests/test_simplify_gate.py",
     # Needs a real test run / a complete agent bootstrap to succeed.
     SKILLS_DIR / "_shared" / "run_tests.py": "tests/test_run_tests.py",
-    SKILLS_DIR / "init" / "detect_stack.py": "tests/test_detect_stack.py",
+    SKILLS_DIR / "orchestra-init" / "detect_stack.py": "tests/test_detect_stack.py",
     # Resolved paths are asserted directly there, including the relative form.
     SKILLS_DIR / "_shared" / "workspace.py": "tests/test_workspace.py",
 }

@@ -1,7 +1,7 @@
 # Design Document — 要件定義書 (Requirements & Macro Design)
 
 > **Role:** Macro-level requirements and design — *what* this project builds and *why*.
-> Written at `/init`, kept current by `/design-tracker` (also invoked from `/checkpointing`).
+> Written at `/orchestra-init`, kept current by `/design-tracker` (also invoked from `/checkpointing`).
 >
 > **Document map:** Shared rules → [rules/](../rules/) ·
 > Shared bootstrap → [AGENTS.md](../../AGENTS.md) · State → [STATE.md](../STATE.md) · Claude symlink → [CLAUDE.md](../../CLAUDE.md) ·
@@ -18,13 +18,13 @@
 
 <!-- What this project explicitly delivers. -->
 
-- 
+-
 
 ### Out of Scope
 
 <!-- What is explicitly NOT covered, to prevent scope creep. -->
 
-- 
+-
 
 ## 機能要件 (Functional Requirements)
 
@@ -69,7 +69,7 @@
 
 <!-- Technical, organizational, regulatory, or resource constraints. -->
 
-- 
+-
 
 ## Key Decisions
 
@@ -83,4 +83,4 @@
 
 <!-- Open design questions and deferred decisions for this project. -->
 
-- 
+-

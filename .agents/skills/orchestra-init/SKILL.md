@@ -1,5 +1,5 @@
 ---
-name: init
+name: orchestra-init
 description: Analyze project structure, populate .agents/docs/DESIGN.md, and write the thin Repository Identity section in .agents/STATE.md.
 disable-model-invocation: true
 ---
@@ -24,7 +24,7 @@ Initialize project-owned context without expanding the always-loaded root
 Run:
 
 ```bash
-python3 .agents/skills/init/detect_stack.py
+python3 .agents/skills/orchestra-init/detect_stack.py
 ```
 
 The script reports **evidence, not conclusions**. It never infers a command:
@@ -70,7 +70,7 @@ user-owned document, and `update_design.py` supplies the dry-run preview, the
 atomic replace, the concurrent-modification hash guard, per-cell `|` escaping,
 and validation of the composed document before it replaces the original.
 
-Write the input JSON to `.agents/logs/init-design-input.json` and use only the
+Write the input JSON to `.agents/logs/orchestra-init-design-input.json` and use only the
 typed keys:
 
 | DESIGN.md target | Input key | Row fields |
@@ -83,9 +83,9 @@ typed keys:
 | Prose sections (背景・目的, スコープ, 制約, TODO / Open Questions) | `section_updates` | `heading`, `content` |
 
 ```bash
-python3 .agents/skills/_shared/update_design.py --input .agents/logs/init-design-input.json
+python3 .agents/skills/_shared/update_design.py --input .agents/logs/orchestra-init-design-input.json
 # Read the preview at preview_file, then apply:
-python3 .agents/skills/_shared/update_design.py --input .agents/logs/init-design-input.json --apply --require-change
+python3 .agents/skills/_shared/update_design.py --input .agents/logs/orchestra-init-design-input.json --apply --require-change
 ```
 
 Completion test — `result == "applied"` **and** (`decisions_appended > 0` or any
@@ -103,7 +103,7 @@ not fabricate requirements. Later incremental design changes go through
 `## Repository Identity` is also written through its typed writer, which
 replaces only that section's body and aborts if `## Main Agent`,
 `## Progress Tracker`, or any working block would be lost. Write
-`.agents/logs/init-identity-input.json`:
+`.agents/logs/orchestra-init-identity-input.json`:
 
 ```json
 {"identity": "One sentence naming what this repository is."}
@@ -111,12 +111,12 @@ replaces only that section's body and aborts if `## Main Agent`,
 
 ```bash
 python3 .agents/skills/_shared/append_state_block.py --type repository-identity \
-  --input .agents/logs/init-identity-input.json
+  --input .agents/logs/orchestra-init-identity-input.json
 python3 .agents/skills/_shared/append_state_block.py --type repository-identity \
-  --input .agents/logs/init-identity-input.json --apply
+  --input .agents/logs/orchestra-init-identity-input.json --apply
 ```
 
-The writer emits the `<!-- Managed by /init. Re-run /init to refresh. -->`
+The writer emits the `<!-- Managed by /orchestra-init. Re-run /orchestra-init to refresh. -->`
 marker and the `docs/DESIGN.md` pointer itself, so the input carries the identity
 sentence only. Do not add a heading, a `---`, or a second paragraph — the writer
 rejects them (exit `1`). Confirm `result: "applied"`, `structure_ok: true`, and
@@ -128,7 +128,7 @@ rejects them (exit `1`). Confirm `result: "applied"`, `structure_ok: true`, and
 Re-run the closing gate, and report the JSON verdicts rather than a claim:
 
 ```bash
-python3 .agents/skills/init/detect_stack.py
+python3 .agents/skills/orchestra-init/detect_stack.py
 python3 .agents/skills/_shared/validate_doc.py --contract design-doc --file .agents/docs/DESIGN.md
 python3 .agents/skills/_shared/validate_doc.py --contract state-doc --file .agents/STATE.md
 ```

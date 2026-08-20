@@ -1178,8 +1178,8 @@ def test_deeper_heading_level_still_satisfies_the_contract(tmp_path: Path) -> No
 
 
 def test_state_doc_accepts_a_minimal_pre_init_state_file(tmp_path: Path) -> None:
-    """`## Repository Identity` is /init-owned and append_state_block.py inserts
-    it when absent, so a state file that has not been through /init is
+    """`## Repository Identity` is /orchestra-init-owned and append_state_block.py inserts
+    it when absent, so a state file that has not been through /orchestra-init is
     legitimate. A contract stricter than the writers guarantee would reject it
     and teach agents that the check is wrong."""
     body = (

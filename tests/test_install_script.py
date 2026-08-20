@@ -173,6 +173,7 @@ def test_install_adds_complete_template_without_overwriting_project_version(
     assert (target / "scripts/install.sh").is_file()
     assert (target / "scripts/update.sh").is_file()
     assert (target / ".claude/settings.json").is_file()
+    assert (target / ".agents/docs/plans/.gitkeep").is_file()
     assert (target / ".agents/docs/research/.gitkeep").is_file()
     assert (target / ".agents/STATE.md").is_file()
     assert "@orchestra:" not in (target / "AGENTS.md").read_text(encoding="utf-8")
@@ -274,6 +275,75 @@ def test_force_install_keeps_existing_native_subagents_and_skills_active(
     assert (target / ".claude/agents").is_dir()
     assert not (target / ".claude/agents").is_symlink()
     assert (target / ".claude/agents/general-purpose-opus.md").is_symlink()
+
+
+def test_install_preserves_existing_native_project_rules(tmp_path: Path) -> None:
+    target = tmp_path / "project"
+    init_git_repo(target)
+    existing_rule = target / ".claude/rules/billing.md"
+    existing_rule.parent.mkdir(parents=True)
+    existing_rule.write_text("project billing rule\n", encoding="utf-8")
+
+    result = run_install(target)
+
+    assert result.returncode == 0, result.stderr
+    assert existing_rule.read_text(encoding="utf-8") == "project billing rule\n"
+    check_result = subprocess.run(
+        ["bash", str(target / ".agents/check.sh")],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert check_result.returncode == 0, check_result.stdout
+
+
+def test_update_preserves_existing_native_project_rules(tmp_path: Path) -> None:
+    template = build_template_repo(tmp_path)
+    target = tmp_path / "project"
+    init_git_repo(target)
+    install_result = run_install(target, script=template / "scripts/install.sh")
+    assert install_result.returncode == 0, install_result.stderr
+    existing_rule = target / ".claude/rules/billing.md"
+    existing_rule.parent.mkdir(parents=True)
+    existing_rule.write_text("project billing rule\n", encoding="utf-8")
+
+    update_result = run_update(target, template)
+
+    assert update_result.returncode == 0, update_result.stderr
+    assert existing_rule.read_text(encoding="utf-8") == "project billing rule\n"
+
+
+def test_update_removes_renamed_init_discovery_link(tmp_path: Path) -> None:
+    template = build_template_repo(tmp_path)
+    target = tmp_path / "project"
+    init_git_repo(target)
+    install_result = run_install(target, script=template / "scripts/install.sh")
+    assert install_result.returncode == 0, install_result.stderr
+    stale_link = target / ".claude/skills/init"
+    stale_link.symlink_to("../../.agents/skills/init")
+
+    update_result = run_update(target, template)
+
+    assert update_result.returncode == 0, update_result.stderr
+    assert not stale_link.exists()
+    assert not stale_link.is_symlink()
+    assert (target / ".claude/skills/orchestra-init").is_symlink()
+
+
+def test_update_preserves_project_owned_native_init_skill(tmp_path: Path) -> None:
+    template = build_template_repo(tmp_path)
+    target = tmp_path / "project"
+    init_git_repo(target)
+    install_result = run_install(target, script=template / "scripts/install.sh")
+    assert install_result.returncode == 0, install_result.stderr
+    native_skill = target / ".claude/skills/init/SKILL.md"
+    native_skill.parent.mkdir()
+    native_skill.write_text("project-owned init skill\n", encoding="utf-8")
+
+    update_result = run_update(target, template)
+
+    assert update_result.returncode == 0, update_result.stderr
+    assert native_skill.read_text(encoding="utf-8") == "project-owned init skill\n"
 
 
 def test_existing_whole_directory_discovery_link_is_migrated_to_entry_links(
@@ -435,6 +505,8 @@ def test_install_creates_native_discovery_symlinks(tmp_path: Path) -> None:
     assert not (target / ".claude/skills").is_symlink()
     assert (target / ".claude/agents/general-purpose-opus.md").is_symlink()
     assert (target / ".claude/skills/context-loader").is_symlink()
+    assert (target / ".claude/skills/orchestra-init").is_symlink()
+    assert not (target / ".claude/skills/init").exists()
     assert (target / ".claude/agents/general-purpose-opus.md").is_file()
     assert (target / ".claude/skills/context-loader/SKILL.md").is_file()
     assert not any(path.is_symlink() for path in (target / ".codex").iterdir())

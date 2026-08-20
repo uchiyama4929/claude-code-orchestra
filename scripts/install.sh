@@ -16,7 +16,6 @@ LEGACY_NATIVE_PATHS=(
     ".claude/docs"
     ".claude/hooks"
     ".claude/logs"
-    ".claude/rules"
 )
 # Claude Code discovers these entries from .claude/. Individual links let
 # project-owned native entries coexist with Orchestra's canonical .agents data.
@@ -32,6 +31,7 @@ TEMPLATE_OWNED_FILES=(
     ".agents/change_main.md"
     ".agents/docs/CODEX_HANDOFF_PLAYBOOK.md"
     ".agents/docs/libraries/.gitkeep"
+    ".agents/docs/plans/.gitkeep"
     ".agents/docs/reviews/.gitkeep"
     "scripts/install.sh"
     "scripts/update.sh"
@@ -459,7 +459,7 @@ print_summary() {
     if [[ -f "${TARGET_ROOT}/.claude/settings.orchestra.json" ]]; then
         warn "Complete the settings merge before starting Claude Code."
     else
-        info "Next: start Claude Code and run /init."
+        info "Next: start Claude Code and run /orchestra-init."
     fi
 }
 

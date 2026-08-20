@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report stack *evidence* and agent-bootstrap integrity for /init.
+"""Report stack *evidence* and agent-bootstrap integrity for /orchestra-init.
 
 This script deliberately does **not** infer commands, tools, or a stack.  It
 reports which manifest and which key each fact came from and lets the agent
@@ -367,7 +367,7 @@ def build_report(root: Path) -> tuple[dict, list[str]]:
 
 def main() -> int:
     parser = JsonArgumentParser(
-        description="Report stack evidence + agent bootstrap integrity for /init",
+        description="Report stack evidence + agent bootstrap integrity for /orchestra-init",
     )
     parser.add_argument(
         "--project-root",

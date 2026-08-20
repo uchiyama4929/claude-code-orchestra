@@ -26,7 +26,7 @@ Create a repository with GitHub's **Use this template** button, clone it, then r
 claude
 ```
 
-Run `/init` inside Claude Code to detect the project stack and populate the project
+Run `/orchestra-init` inside Claude Code to detect the project stack and populate the project
 identity and design document.
 
 ### Existing Project
@@ -51,7 +51,7 @@ An existing `.claude/settings.json` is never overwritten. When a manual merge is
 needed, the installer writes `.claude/settings.orchestra.json`; merge the required
 settings and delete the candidate before starting Claude Code.
 
-Then start Claude Code and run `/init` inside it:
+Then start Claude Code and run `/orchestra-init` inside it:
 
 ```bash
 claude
@@ -399,7 +399,7 @@ preserving the main-agent selection, repository identity, and progress link.
 /checkpointing --compact-only    # Run only the Compact Phase (old /context-refresh)
 ```
 
-#### `/init` — Project Initialization
+#### `/orchestra-init` — Project Initialization
 
 Analyzes the project structure, auto-detects tech stack, commands, and
 configuration. Populates `.agents/docs/DESIGN.md` and updates only the thin

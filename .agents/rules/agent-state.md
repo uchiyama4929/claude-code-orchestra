@@ -8,7 +8,7 @@ state belongs in `.agents/STATE.md`, never in either bootstrap path.
 
 | Section | Owner / writers | Content |
 |---------|-----------------|---------|
-| `## Repository Identity` | `/init` only | Thin identity plus a pointer to `.agents/docs/DESIGN.md`. |
+| `## Repository Identity` | `/orchestra-init` only | Thin identity plus a pointer to `.agents/docs/DESIGN.md`. |
 | `## Progress Tracker` | `/checkpointing` | Idempotent link to `PROGRESS.md`. |
 | Working blocks | `/feature`, `/troubleshoot`, `/checkpointing`, and manual notes | Current project, feature, and bug-fix context. |
 
@@ -43,4 +43,4 @@ Structural contract for the document itself:
 `.agents/skills/_shared/validate_doc.py --contract state-doc --file .agents/STATE.md`
 (requires `## Main Agent` and `## Progress Tracker`; `## Repository Identity` is
 inserted by its writer when missing, so it is not required). Stack and shared
-state: `.agents/skills/init/detect_stack.py`.
+state: `.agents/skills/orchestra-init/detect_stack.py`.

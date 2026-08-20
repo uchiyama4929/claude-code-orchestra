@@ -52,9 +52,9 @@ Read each path in `read_order`. Then check the rest of the report:
   proceed as if they were empty.
 - **`unreadable`** — files that *do* exist but could not be read or decoded.
   This is a filesystem or encoding problem, not an un-bootstrapped repository:
-  do not respond by suggesting `/init`.
+  do not respond by suggesting `/orchestra-init`.
 - **`warnings`** — `design.placeholder` is tri-state: `true` means
-  `.agents/docs/DESIGN.md` is absent or still the uninitialised `/init`
+  `.agents/docs/DESIGN.md` is absent or still the uninitialised `/orchestra-init`
   template (its "Background & Purpose" section is empty), `false` means real
   prose, and `null` means the marker heading is gone so the question cannot be
   answered. `progress.entries: 0` means `PROGRESS.md` exists but holds no

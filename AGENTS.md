@@ -66,7 +66,7 @@ in `.agents/rules/codex-delegation.md`.
 Use the canonical workflows in `.agents/skills/`:
 
 - Always start with `context-loader`.
-- Project context: `init`, `design-tracker`, `checkpointing`, `catchup`.
+- Project context: `orchestra-init`, `design-tracker`, `checkpointing`, `catchup`.
 - Delivery: `feature`, `plan`, `tdd`, `team-execute`, `troubleshoot`, `simplify`.
 - Investigation: `spike`, `research-lib`, `update-lib-docs`.
 - Codex integration: `codex-system`.
