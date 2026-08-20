@@ -34,8 +34,9 @@ def read_frontmatter(path: Path) -> dict[str, str]:
 
 def test_model_specific_general_purpose_agents_are_defined() -> None:
     expected_models = {
-        "general-purpose-opus.md": ("general-purpose-opus", "opus"),
+        "general-purpose-opus.md": ("general-purpose-opus", "opus[1m]"),
         "general-purpose-sonnet.md": ("general-purpose-sonnet", "sonnet"),
+        "fable-advisor.md": ("fable-advisor", "claude-fable-5[1m]"),
     }
 
     for filename, (expected_name, expected_model) in expected_models.items():
@@ -46,12 +47,15 @@ def test_model_specific_general_purpose_agents_are_defined() -> None:
     assert not (AGENTS_DIR / "general-purpose.md").exists()
 
 
-def test_unspecified_subagents_default_to_sonnet() -> None:
+def test_main_and_delegated_models_are_configured_independently() -> None:
     settings = json.loads(
         (REPO_ROOT / ".claude/settings.json").read_text(encoding="utf-8")
     )
 
-    assert settings["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] == "sonnet"
+    assert settings["model"] == "opus[1m]"
+    assert settings["effortLevel"] == "xhigh"
+    assert settings["teammateDefaultModel"] == "sonnet"
+    assert "CLAUDE_CODE_SUBAGENT_MODEL" not in settings["env"]
 
 
 def test_routing_docs_do_not_reference_removed_general_purpose_agent() -> None:

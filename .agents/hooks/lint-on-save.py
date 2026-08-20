@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Post-tool hook: Run formatter and type checker on Python files after Edit/Write.
+Post-tool hook: Check formatting, lint, and types after Python Edit/Write.
 
 Triggered after Edit or Write tools modify files.
-Runs ruff (format + lint) and ty (type check) on Python files.
+Reports issues without rewriting the edited file.
 """
 
 import json
@@ -79,28 +79,25 @@ def main() -> None:
 
     issues: list[str] = []
 
-    # Run ruff format
+    # Preserve the user's diff; formatting is an explicit command.
     ret, stdout, stderr = run_command(
-        ["uv", "run", "ruff", "format", file_path],
+        ["uv", "run", "--no-sync", "ruff", "format", "--check", file_path],
         cwd=project_dir,
     )
     if ret != 0:
-        issues.append(f"ruff format failed:\n{stderr or stdout}")
+        issues.append(f"ruff format check failed:\n{stderr or stdout}")
 
-    # Run ruff check with auto-fix
     ret, stdout, stderr = run_command(
-        ["uv", "run", "ruff", "check", "--fix", file_path],
+        ["uv", "run", "--no-sync", "ruff", "check", file_path],
         cwd=project_dir,
     )
     if ret != 0:
-        # Show remaining issues that couldn't be auto-fixed
         output = stdout or stderr
         if output.strip():
             issues.append(f"ruff check issues:\n{output}")
 
-    # Run ty type check
     ret, stdout, stderr = run_command(
-        ["uv", "run", "ty", "check", file_path],
+        ["uv", "run", "--no-sync", "ty", "check", file_path],
         cwd=project_dir,
     )
     if ret != 0:

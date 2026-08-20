@@ -42,7 +42,7 @@ def project(tmp_path: Path) -> Path:
     """A fixture repository with a complete, valid agent bootstrap.
 
     Mirrors what ``.agents/check.sh`` verifies: the root bootstrap, the
-    ``CLAUDE.md`` symlink, shared state, and both native discovery symlinks.
+    ``CLAUDE.md`` symlink, shared state, and native entry-level discovery links.
     """
     (tmp_path / "AGENTS.md").write_text("# AGENTS\n", encoding="utf-8")
     (tmp_path / "CLAUDE.md").symlink_to("AGENTS.md")
@@ -50,9 +50,13 @@ def project(tmp_path: Path) -> Path:
     state.parent.mkdir(parents=True)
     state.write_text("# Agent State\n\n## Repository Identity\n", encoding="utf-8")
     for name in ("agents", "skills"):
-        (tmp_path / ".agents" / name).mkdir()
-        (tmp_path / ".claude").mkdir(exist_ok=True)
-        (tmp_path / ".claude" / name).symlink_to(f"../.agents/{name}")
+        canonical = tmp_path / ".agents" / name
+        canonical.mkdir()
+        bundled = canonical / f"bundled-{name}"
+        bundled.write_text("bundled\n", encoding="utf-8")
+        native = tmp_path / ".claude" / name
+        native.mkdir(parents=True)
+        (native / bundled.name).symlink_to(f"../../.agents/{name}/{bundled.name}")
     return tmp_path
 
 
@@ -287,12 +291,8 @@ def test_complete_bootstrap_is_ok(project: Path) -> None:
     assert "error" not in payload
 
 
-def test_dangling_discovery_symlink_fails_the_bootstrap(project: Path) -> None:
-    """A dangling ``.claude/skills`` disables all native skill auto-discovery,
-    yet detect_stack.py reported ``agent_bootstrap`` all-true and /init reported
-    success. SKILL.md claimed exit 2 covered the discovery symlink; only
-    ``check.sh`` actually looked."""
-    (project / ".claude" / "skills").unlink()
+def test_missing_discovery_entry_fails_the_bootstrap(project: Path) -> None:
+    (project / ".claude/skills/bundled-skills").unlink()
     code, payload, stderr = run(project)
     assert code == 2, stderr
     assert payload["ok"] is False
@@ -301,13 +301,24 @@ def test_dangling_discovery_symlink_fails_the_bootstrap(project: Path) -> None:
     assert "claude_skills_link" in payload["error"]
 
 
-def test_discovery_symlink_to_the_wrong_target_fails(project: Path) -> None:
-    link = project / ".claude" / "agents"
+def test_discovery_entry_to_the_wrong_target_fails(project: Path) -> None:
+    link = project / ".claude/agents/bundled-agents"
     link.unlink()
-    link.symlink_to("../elsewhere")
+    link.symlink_to("../../elsewhere")
     code, payload, _ = run(project)
     assert code == 2
     assert payload["agent_bootstrap"]["claude_agents_link"] is False
+
+
+def test_project_native_discovery_entries_can_coexist(project: Path) -> None:
+    (project / ".claude/skills/project-skill").write_text(
+        "project owned\n", encoding="utf-8"
+    )
+
+    code, payload, stderr = run(project)
+
+    assert code == 0, stderr
+    assert payload["agent_bootstrap"]["claude_skills_link"] is True
 
 
 def test_missing_state_marker_fails_the_bootstrap(project: Path) -> None:

@@ -1,7 +1,7 @@
 ---
 name: fable-advisor
 description: Rare escalation advisor for design arbitration, unblocking stuck problems, and final review of large changes. Never implements code. Read-only analysis; writes only review notes to .agents/docs/reviews/. Invoke sparingly — routine reviews belong to team-execute Phase 2 or /codex:adversarial-review.
-model: fable
+model: claude-fable-5[1m]
 tools: Read, Grep, Glob, Write
 ---
 

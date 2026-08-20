@@ -52,10 +52,11 @@ Read these fields before writing anything:
 Exit codes: `0` normal · `1` bad arguments, including a `--project-root` that is
 not a directory · `2` the agent bootstrap is invalid — `ok: false` and `error`
 name the failed markers. Exit `2` covers the root bootstrap, the `CLAUDE.md`
-symlink, shared state, **and both native discovery symlinks** (`.claude/agents`
-and `.claude/skills` must be symlinks to `../.agents/…`; a dangling one silently
-disables all native agent and skill discovery). Stop and repair the installation
-— `bash .agents/check.sh` diagnoses the same links — before writing context.
+symlink, shared state, **and both native discovery directories**. Every bundled
+entry in `.agents/{agents,skills}` must have a resolving item-level link under
+`.claude/{agents,skills}`; unrelated project-native entries may coexist. Stop and
+repair the installation — `bash .agents/check.sh` diagnoses the same entries —
+before writing context.
 
 ### 2. Ask for missing context
 
@@ -133,7 +134,7 @@ python3 .agents/skills/_shared/validate_doc.py --contract state-doc --file .agen
 ```
 
 All three must exit `0` with `ok: true`. `detect_stack.py` confirms shared state
-and the discovery symlinks still resolve; the two contracts confirm the documents
+and the discovery entries still resolve; the two contracts confirm the documents
 this skill just wrote still have the sections every other skill reads them for —
 `exit 2` names the missing section. Checking the two documents directly is
 stricter than inferring their health from the detector, which is why the detector

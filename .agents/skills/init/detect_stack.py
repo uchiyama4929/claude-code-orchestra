@@ -304,11 +304,10 @@ def detect_ci(root: Path) -> list[dict]:
 
 
 def detect_agent_bootstrap(root: Path) -> tuple[dict[str, bool], list[str]]:
-    """Verify the root bootstrap, both Claude discovery links, and shared state.
+    """Verify the root bootstrap, Claude discovery entries, and shared state.
 
-    The discovery links mirror ``.agents/check.sh``: a dangling
-    ``.claude/skills`` disables *all* native skill auto-discovery, so /init
-    must not report success while it is broken.
+    Every bundled entry must resolve from Claude's native discovery directory;
+    unrelated project-native entries are allowed to coexist.
     """
     agents_md = root / "AGENTS.md"
     claude_md = root / "CLAUDE.md"
@@ -319,22 +318,32 @@ def detect_agent_bootstrap(root: Path) -> tuple[dict[str, bool], list[str]]:
         "claude_symlink": claude_md.is_symlink()
         and claude_md.resolve() == agents_md.resolve(),
         "state_md": state_text is not None and "# Agent State" in state_text,
-        "claude_agents_link": _is_discovery_link(root, "agents"),
-        "claude_skills_link": _is_discovery_link(root, "skills"),
+        "claude_agents_link": _has_discovery_entries(root, "agents"),
+        "claude_skills_link": _has_discovery_entries(root, "skills"),
     }
     return status, [name for name, ok in status.items() if not ok]
 
 
-def _is_discovery_link(root: Path, name: str) -> bool:
-    """True when .claude/<name> is a symlink to ../.agents/<name> that resolves."""
-    link = root / ".claude" / name
-    if not link.is_symlink():
+def _has_discovery_entries(root: Path, name: str) -> bool:
+    """True when every canonical entry has its native discovery link."""
+    canonical = root / ".agents" / name
+    native = root / ".claude" / name
+    if not canonical.is_dir() or canonical.is_symlink():
         return False
-    try:
-        target = link.readlink()
-    except OSError:
+    if not native.is_dir() or native.is_symlink():
         return False
-    return str(target) == f"../.agents/{name}" and link.is_dir()
+
+    for source in canonical.iterdir():
+        link = native / source.name
+        expected = Path(f"../../.agents/{name}/{source.name}")
+        try:
+            if not link.is_symlink() or link.readlink() != expected:
+                return False
+            if link.resolve(strict=True) != source.resolve(strict=True):
+                return False
+        except OSError:
+            return False
+    return True
 
 
 def build_report(root: Path) -> tuple[dict, list[str]]:

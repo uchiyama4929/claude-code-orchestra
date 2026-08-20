@@ -10,6 +10,10 @@ ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PASS=0
 FAIL=0
 
+resolve_path() {
+    python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
+}
+
 check() {
     local name="$1"
     shift
@@ -98,7 +102,7 @@ print(d.get('env', {}).get('CODEX_MODEL', ''))
 
     # Extract model from config.toml (simple grep; avoids toml parser dep)
     local config_model
-    config_model=$(grep -E '^model\s*=' "${config}" | head -1 | sed 's/.*=\s*"\(.*\)"/\1/')
+    config_model=$(awk -F'"' '/^model[[:space:]]*=/{print $2; exit}' "${config}")
 
     if [[ -z "${config_model}" ]]; then
         echo "  Could not read model from ${config}"
@@ -131,8 +135,7 @@ print(d.get('env', {}).get('CODEX_MODEL', ''))
     local consult="${ROOT}/.agents/skills/_shared/codex_consult.py"
     if [[ -f "${consult}" ]]; then
         local consult_model
-        consult_model=$(grep -E '^DEFAULT_MODEL\s*=' "${consult}" \
-            | head -1 | sed 's/.*=\s*"\(.*\)"/\1/')
+        consult_model=$(awk -F'"' '/^DEFAULT_MODEL[[:space:]]*=/{print $2; exit}' "${consult}")
         if [[ -z "${consult_model}" ]]; then
             echo "  Could not read DEFAULT_MODEL from codex_consult.py"
             ok=false
@@ -296,7 +299,7 @@ check_native_boundaries() {
     done
 
     if [[ ! -L "${ROOT}/CLAUDE.md" ]] ||
-        [[ "$(realpath -m -- "${ROOT}/CLAUDE.md")" != "$(realpath -m -- "${ROOT}/AGENTS.md")" ]]; then
+        [[ "$(resolve_path "${ROOT}/CLAUDE.md")" != "$(resolve_path "${ROOT}/AGENTS.md")" ]]; then
         echo "  CLAUDE.md must be a symlink to root AGENTS.md"
         ok=false
     fi
@@ -304,23 +307,34 @@ check_native_boundaries() {
     local forbidden_path
     for forbidden_path in \
         .claude/checkpoints .claude/docs .claude/hooks \
-        .claude/logs .claude/rules .codex/skills .codex/AGENTS.md; do
+        .claude/logs .claude/rules .codex/AGENTS.md; do
         if [[ -e "${ROOT}/${forbidden_path}" || -L "${ROOT}/${forbidden_path}" ]]; then
             echo "  Shared content remains in a native directory: ${forbidden_path}"
             ok=false
         fi
     done
 
-    # Native discovery symlinks must be symlinks into the canonical .agents/
-    # directories (never real directories that would fork the SSOT).
-    local discovery_link discovery_target
-    for discovery_link in agents skills; do
-        discovery_target="../.agents/${discovery_link}"
-        if [[ ! -L "${ROOT}/.claude/${discovery_link}" ]] ||
-            [[ "$(readlink -- "${ROOT}/.claude/${discovery_link}")" != "${discovery_target}" ]]; then
-            echo "  Native discovery symlink missing or wrong: .claude/${discovery_link} -> ${discovery_target}"
+    local discovery_dir source name native_link discovery_target
+    for discovery_dir in agents skills; do
+        if [[ ! -d "${ROOT}/.claude/${discovery_dir}" ]] ||
+            [[ -L "${ROOT}/.claude/${discovery_dir}" ]]; then
+            echo "  Native discovery directory missing or linked as a whole: .claude/${discovery_dir}"
             ok=false
+            continue
         fi
+
+        for source in "${ROOT}/.agents/${discovery_dir}"/*; do
+            [[ -e "${source}" || -L "${source}" ]] || continue
+            name="$(basename -- "${source}")"
+            native_link="${ROOT}/.claude/${discovery_dir}/${name}"
+            discovery_target="../../.agents/${discovery_dir}/${name}"
+            if [[ ! -L "${native_link}" ]] ||
+                [[ "$(readlink -- "${native_link}")" != "${discovery_target}" ]] ||
+                [[ "$(resolve_path "${native_link}")" != "$(resolve_path "${source}")" ]]; then
+                echo "  Native discovery entry missing or wrong: .claude/${discovery_dir}/${name}"
+                ok=false
+            fi
+        done
     done
 
     local native_entry
@@ -330,13 +344,13 @@ check_native_boundaries() {
             agents|skills) ;;
             *) echo "  Unexpected .claude entry: ${native_entry}"; ok=false ;;
         esac
-    done < <(find "${ROOT}/.claude" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+    done < <(find "${ROOT}/.claude" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
     while IFS= read -r native_entry; do
-        if [[ "${native_entry}" != "config.toml" ]]; then
-            echo "  Unexpected .codex entry: ${native_entry}"
-            ok=false
-        fi
-    done < <(find "${ROOT}/.codex" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+        case "${native_entry}" in
+            config.toml|skills) ;;
+            *) echo "  Unexpected .codex entry: ${native_entry}"; ok=false ;;
+        esac
+    done < <(find "${ROOT}/.codex" -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
 
     if [[ ! -f "${ROOT}/.claude/settings.json" ]] ||
         ! grep -Fq '.agents/hooks/' "${ROOT}/.claude/settings.json" ||

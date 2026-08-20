@@ -6,7 +6,7 @@
 |-------------|-------------------------------------------------------------|
 | `.agents/`  | Shared policy/capabilities plus project docs, logs, checkpoints, and state |
 | `.claude/`  | Claude Code native configuration only                         |
-| `.codex/`   | Codex native configuration only                               |
+| `.codex/`   | Codex native configuration and project-owned extensions       |
 
 ## Entries
 

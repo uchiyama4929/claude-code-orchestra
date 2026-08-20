@@ -1,7 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "language": "japanese",
-  "effortLevel": "high",
+  "model": "opus[1m]",
+  "effortLevel": "xhigh",
+  "teammateDefaultModel": "sonnet",
   "fastMode": false,
   "alwaysThinkingEnabled": true,
   "hooks": {
@@ -193,7 +195,6 @@
   "env": {
     "EDITOR": "code --wait",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
     "CODEX_MODEL": "gpt-5.6-sol"
   }
 }

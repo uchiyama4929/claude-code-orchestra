@@ -5,7 +5,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd -P)"
 TEMPLATE_OWNED_DIRS=(
-    ".codex"
     ".agents/rules"
     ".agents/skills"
     ".agents/agents"
@@ -19,17 +18,15 @@ LEGACY_NATIVE_PATHS=(
     ".claude/logs"
     ".claude/rules"
 )
-# Native discovery symlinks: product-native runtimes (Claude Code) auto-discover
-# subagents and skills only from their own directories, which are not
-# configurable to point elsewhere. To keep .agents/ the single physical source
-# while still getting native auto-discovery, each entry links a native path to
-# its canonical .agents/ directory. Format: "<native-path>:<relative-target>".
-# The relative target is resolved from inside the native path's parent (.claude).
-NATIVE_DISCOVERY_LINKS=(
-    ".claude/agents:../.agents/agents"
-    ".claude/skills:../.agents/skills"
+# Claude Code discovers these entries from .claude/. Individual links let
+# project-owned native entries coexist with Orchestra's canonical .agents data.
+# Format: "<native-directory>:<canonical-directory>".
+NATIVE_DISCOVERY_DIRS=(
+    ".claude/agents:.agents/agents"
+    ".claude/skills:.agents/skills"
 )
 TEMPLATE_OWNED_FILES=(
+    ".codex/config.toml"
     ".agents/INDEX.md"
     ".agents/check.sh"
     ".agents/change_main.md"
@@ -64,6 +61,9 @@ CONFLICTS=()
 info() { echo "[INFO] $*"; }
 warn() { echo "[WARN] $*"; }
 error() { echo "[ERROR] $*" >&2; }
+resolve_path() {
+    python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
+}
 
 usage() {
     cat <<'EOF'
@@ -176,7 +176,7 @@ validate_destination_paths() {
             fi
         done
 
-        resolved="$(realpath -m -- "${TARGET_ROOT}/${path}")"
+        resolved="$(resolve_path "${TARGET_ROOT}/${path}")"
         if [[ "${resolved}" != "${TARGET_ROOT}/"* ]]; then
             error "Refusing path that resolves outside the target: ${path} -> ${resolved}"
             exit 2
@@ -220,19 +220,20 @@ collect_conflicts() {
         fi
     done
 
-    # Native discovery paths are project-owned until we link them: a target repo
-    # may already keep its own subagents/skills there. Anything that is not
-    # already the exact link we are about to create counts as a conflict, so it
-    # is reported and backed up instead of being destroyed by the link step.
     local entry native_path target
-    for entry in "${NATIVE_DISCOVERY_LINKS[@]}"; do
+    for entry in "${NATIVE_DISCOVERY_DIRS[@]}"; do
         native_path="${entry%%:*}"
         target="${entry##*:}"
         if [[ -L "${TARGET_ROOT}/${native_path}" ]] \
-            && [[ "$(readlink -- "${TARGET_ROOT}/${native_path}")" == "${target}" ]]; then
+            && [[ "$(readlink -- "${TARGET_ROOT}/${native_path}")" == "../${target}" ]]; then
             continue
         fi
-        if [[ -e "${TARGET_ROOT}/${native_path}" || -L "${TARGET_ROOT}/${native_path}" ]]; then
+        if [[ -d "${TARGET_ROOT}/${native_path}" ]] \
+            && [[ ! -L "${TARGET_ROOT}/${native_path}" ]]; then
+            continue
+        fi
+        if [[ -e "${TARGET_ROOT}/${native_path}" ]] \
+            || [[ -L "${TARGET_ROOT}/${native_path}" ]]; then
             CONFLICTS+=("${native_path}")
         fi
     done
@@ -318,7 +319,7 @@ repair_claude_entrypoint() {
     local link="${TARGET_ROOT}/CLAUDE.md"
     local canonical="${TARGET_ROOT}/AGENTS.md"
     if [[ -L "${link}" ]] \
-        && [[ "$(realpath -m -- "${link}")" == "$(realpath -m -- "${canonical}")" ]]; then
+        && [[ "$(resolve_path "${link}")" == "$(resolve_path "${canonical}")" ]]; then
         return 0
     fi
     rm -rf -- "${link}"
@@ -327,18 +328,33 @@ repair_claude_entrypoint() {
 }
 
 link_native_discovery_dirs() {
-    local entry native_path target link
-    for entry in "${NATIVE_DISCOVERY_LINKS[@]}"; do
+    local entry native_path canonical_path native_dir canonical_dir source name link target
+    for entry in "${NATIVE_DISCOVERY_DIRS[@]}"; do
         native_path="${entry%%:*}"
-        target="${entry##*:}"
-        link="${TARGET_ROOT}/${native_path}"
-        if [[ -L "${link}" && "$(readlink -- "${link}")" == "${target}" ]]; then
-            continue
+        canonical_path="${entry##*:}"
+        native_dir="${TARGET_ROOT}/${native_path}"
+        canonical_dir="${TARGET_ROOT}/${canonical_path}"
+
+        if [[ -L "${native_dir}" ]]; then
+            unlink -- "${native_dir}"
         fi
-        rm -rf -- "${link}"
-        mkdir -p "$(dirname -- "${link}")"
-        ln -s "${target}" "${link}"
-        info "Linked ${native_path} -> ${target}"
+        mkdir -p "${native_dir}"
+
+        for source in "${canonical_dir}"/*; do
+            [[ -e "${source}" || -L "${source}" ]] || continue
+            name="$(basename -- "${source}")"
+            link="${native_dir}/${name}"
+            target="../../${canonical_path}/${name}"
+            if [[ -L "${link}" && "$(readlink -- "${link}")" == "${target}" ]]; then
+                continue
+            fi
+            if [[ -e "${link}" || -L "${link}" ]]; then
+                warn "Preserved existing native entry: ${native_path}/${name}"
+                continue
+            fi
+            ln -s "${target}" "${link}"
+            info "Linked ${native_path}/${name} -> ${target}"
+        done
     done
 }
 

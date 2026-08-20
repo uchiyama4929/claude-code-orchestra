@@ -7,6 +7,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_SCRIPT = REPO_ROOT / "scripts" / "install.sh"
+UPDATE_SCRIPT = REPO_ROOT / "scripts" / "update.sh"
+PERSONAL_FORK_URL = "https://github.com/uchiyama4929/claude-code-orchestra.git"
 
 
 def init_git_repo(path: Path) -> None:
@@ -18,12 +20,17 @@ def run_install(
     target: Path,
     *options: str,
     script: Path = INSTALL_SCRIPT,
+    extra_path: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    if extra_path is not None:
+        env["PATH"] = f"{extra_path}{os.pathsep}{env['PATH']}"
     return subprocess.run(
         ["bash", str(script), "--yes", *options, str(target)],
         check=False,
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
@@ -88,6 +95,47 @@ def find_debris(root: Path) -> list[Path]:
     return debris
 
 
+def make_rejected_realpath_shim(tmp_path: Path) -> Path:
+    shim_dir = tmp_path / "fake-bin"
+    shim_dir.mkdir(parents=True)
+    shim = shim_dir / "realpath"
+    shim.write_text(
+        '#!/usr/bin/env bash\necho "realpath must not be required" >&2\nexit 64\n',
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    return shim_dir
+
+
+def test_default_update_source_is_personal_fork() -> None:
+    assert PERSONAL_FORK_URL in UPDATE_SCRIPT.read_text(encoding="utf-8")
+
+
+def test_install_does_not_require_gnu_realpath(tmp_path: Path) -> None:
+    target = tmp_path / "project"
+    init_git_repo(target)
+
+    result = run_install(target, extra_path=make_rejected_realpath_shim(tmp_path))
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_update_does_not_require_gnu_realpath(tmp_path: Path) -> None:
+    template = build_template_repo(tmp_path)
+    target = tmp_path / "project"
+    init_git_repo(target)
+    install_result = run_install(target, script=template / "scripts/install.sh")
+    assert install_result.returncode == 0, install_result.stderr
+
+    result = run_update(
+        target,
+        template,
+        extra_path=make_rejected_realpath_shim(tmp_path / "update"),
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_install_adds_complete_template_without_overwriting_project_version(
     tmp_path: Path,
 ) -> None:
@@ -121,8 +169,6 @@ def test_install_adds_complete_template_without_overwriting_project_version(
         "agents",
         "skills",
     }
-    assert (target / ".claude/agents").is_symlink()
-    assert (target / ".claude/skills").is_symlink()
     assert {path.name for path in (target / ".codex").iterdir()} == {"config.toml"}
     assert (target / "scripts/install.sh").is_file()
     assert (target / "scripts/update.sh").is_file()
@@ -191,11 +237,9 @@ def test_force_install_backs_up_conflicts_before_replacing_them(
     assert not (target / ".agents/rules/custom.md").exists()
 
 
-def test_install_refuses_to_destroy_existing_native_subagents_and_skills(
+def test_install_preserves_existing_native_subagents_and_skills(
     tmp_path: Path,
 ) -> None:
-    """A repo that already uses Claude Code natively keeps its own subagents and
-    skills in .claude/. Linking those paths must never silently delete them."""
     target = tmp_path / "project"
     init_git_repo(target)
     existing_agent = target / ".claude/agents/my-agent.md"
@@ -207,14 +251,14 @@ def test_install_refuses_to_destroy_existing_native_subagents_and_skills(
 
     result = run_install(target)
 
-    assert result.returncode == 2
-    assert "--force" in result.stderr
+    assert result.returncode == 0, result.stderr
     assert existing_agent.read_text(encoding="utf-8") == "user's own subagent\n"
     assert existing_skill.read_text(encoding="utf-8") == "user's own skill\n"
-    assert not (target / "AGENTS.md").exists()
+    assert (target / ".claude/agents/general-purpose-opus.md").is_symlink()
+    assert (target / ".claude/skills/context-loader").is_symlink()
 
 
-def test_force_install_backs_up_existing_native_subagents_and_skills(
+def test_force_install_keeps_existing_native_subagents_and_skills_active(
     tmp_path: Path,
 ) -> None:
     target = tmp_path / "project"
@@ -226,20 +270,15 @@ def test_force_install_backs_up_existing_native_subagents_and_skills(
     result = run_install(target, "--force")
 
     assert result.returncode == 0, result.stderr
-    backups = list(target.glob(".orchestra-backup-*"))
-    assert len(backups) == 1
-    assert (backups[0] / ".claude/agents/my-agent.md").read_text(
-        encoding="utf-8"
-    ) == "user's own subagent\n"
-    assert (target / ".claude/agents").is_symlink()
-    assert (target / ".claude/agents").readlink().as_posix() == "../.agents/agents"
+    assert existing_agent.read_text(encoding="utf-8") == "user's own subagent\n"
+    assert (target / ".claude/agents").is_dir()
+    assert not (target / ".claude/agents").is_symlink()
+    assert (target / ".claude/agents/general-purpose-opus.md").is_symlink()
 
 
-def test_existing_correct_discovery_link_is_not_treated_as_a_conflict(
+def test_existing_whole_directory_discovery_link_is_migrated_to_entry_links(
     tmp_path: Path,
 ) -> None:
-    """A path that is already exactly the link we would create carries no user
-    data, so it must not abort the install the way real content does."""
     target = tmp_path / "project"
     init_git_repo(target)
     (target / ".claude").mkdir()
@@ -248,12 +287,13 @@ def test_existing_correct_discovery_link_is_not_treated_as_a_conflict(
     result = run_install(target)
 
     assert result.returncode == 0, result.stderr
-    assert (target / ".claude/agents").is_symlink()
-    assert (target / ".claude/agents").readlink().as_posix() == "../.agents/agents"
+    assert (target / ".claude/agents").is_dir()
+    assert not (target / ".claude/agents").is_symlink()
+    assert (target / ".claude/agents/general-purpose-opus.md").is_symlink()
     assert (target / ".claude/agents/general-purpose-opus.md").is_file()
 
 
-def test_update_backs_up_native_discovery_content_instead_of_deleting_it(
+def test_update_preserves_native_discovery_content_and_adds_entry_links(
     tmp_path: Path,
 ) -> None:
     template = build_template_repo(tmp_path)
@@ -261,21 +301,33 @@ def test_update_backs_up_native_discovery_content_instead_of_deleting_it(
     init_git_repo(target)
     assert run_install(target, script=template / "scripts/install.sh").returncode == 0
 
-    link = target / ".claude/agents"
-    link.unlink()
-    link.mkdir()
-    (link / "downstream-agent.md").write_text("downstream agent\n", encoding="utf-8")
+    native_agents = target / ".claude/agents"
+    (native_agents / "downstream-agent.md").write_text(
+        "downstream agent\n", encoding="utf-8"
+    )
 
     update_result = run_update(target, template)
 
     assert update_result.returncode == 0, update_result.stderr
-    assert link.is_symlink()
-    assert link.readlink().as_posix() == "../.agents/agents"
-    backups = list(target.glob(".orchestra-backup-native-discovery-*"))
-    assert len(backups) == 1
-    assert (backups[0] / ".claude/agents/downstream-agent.md").read_text(
+    assert native_agents.is_dir()
+    assert (native_agents / "downstream-agent.md").read_text(
         encoding="utf-8"
     ) == "downstream agent\n"
+    assert (native_agents / "general-purpose-opus.md").is_symlink()
+
+
+def test_install_preserves_existing_codex_skills(tmp_path: Path) -> None:
+    target = tmp_path / "project"
+    init_git_repo(target)
+    existing_skill = target / ".codex/skills/my-skill/SKILL.md"
+    existing_skill.parent.mkdir(parents=True)
+    existing_skill.write_text("user's Codex skill\n", encoding="utf-8")
+
+    result = run_install(target)
+
+    assert result.returncode == 0, result.stderr
+    assert existing_skill.read_text(encoding="utf-8") == "user's Codex skill\n"
+    assert (target / ".codex/config.toml").is_file()
 
 
 def test_install_preserves_existing_settings_and_writes_merge_candidate(
@@ -377,17 +429,12 @@ def test_install_creates_native_discovery_symlinks(tmp_path: Path) -> None:
     result = run_install(target)
 
     assert result.returncode == 0, result.stderr
-    # The only symlinks in .claude are the native discovery links into .agents/;
-    # .codex keeps none. No shared content is physically duplicated.
-    claude_symlinks = {
-        path.name: path.readlink().as_posix()
-        for path in (target / ".claude").iterdir()
-        if path.is_symlink()
-    }
-    assert claude_symlinks == {
-        "agents": "../.agents/agents",
-        "skills": "../.agents/skills",
-    }
+    assert (target / ".claude/agents").is_dir()
+    assert (target / ".claude/skills").is_dir()
+    assert not (target / ".claude/agents").is_symlink()
+    assert not (target / ".claude/skills").is_symlink()
+    assert (target / ".claude/agents/general-purpose-opus.md").is_symlink()
+    assert (target / ".claude/skills/context-loader").is_symlink()
     assert (target / ".claude/agents/general-purpose-opus.md").is_file()
     assert (target / ".claude/skills/context-loader/SKILL.md").is_file()
     assert not any(path.is_symlink() for path in (target / ".codex").iterdir())
@@ -396,7 +443,9 @@ def test_install_creates_native_discovery_symlinks(tmp_path: Path) -> None:
     )
 
 
-def test_update_removes_legacy_native_runtime_paths(tmp_path: Path) -> None:
+def test_update_preserves_codex_skills_and_repairs_native_discovery(
+    tmp_path: Path,
+) -> None:
     template = build_template_repo(tmp_path)
 
     target = tmp_path / "project"
@@ -418,6 +467,8 @@ def test_update_removes_legacy_native_runtime_paths(tmp_path: Path) -> None:
     link = target / ".claude/skills"
     if link.is_symlink():
         link.unlink()
+    elif link.is_dir():
+        shutil.rmtree(link)
     link.write_text("not a symlink anymore\n", encoding="utf-8")
     codex_skills = target / ".codex/skills"
     if codex_skills.is_symlink():
@@ -444,16 +495,16 @@ def test_update_removes_legacy_native_runtime_paths(tmp_path: Path) -> None:
     update_result = run_update(target, template)
 
     assert update_result.returncode == 0, update_result.stderr
-    # A corrupted .claude/skills is healed back into the discovery symlink, and
-    # .claude/agents is (re)created, so Claude Code keeps auto-discovering the
-    # canonical .agents/ content. .codex/skills stays removed (Codex resolves
-    # skills through config.toml path= instead).
-    assert link.is_symlink()
-    assert link.readlink().as_posix() == "../.agents/skills"
-    assert (target / ".claude/agents").is_symlink()
-    assert (target / ".claude/agents").readlink().as_posix() == "../.agents/agents"
-    assert not codex_skills.exists()
-    assert {path.name for path in (target / ".codex").iterdir()} == {"config.toml"}
+    assert link.is_dir()
+    assert not link.is_symlink()
+    assert (link / "context-loader").is_symlink()
+    assert (target / ".claude/agents").is_dir()
+    assert (target / ".claude/agents/general-purpose-opus.md").is_symlink()
+    assert (codex_skills / "legacy.md").read_text(encoding="utf-8") == "legacy\n"
+    assert {path.name for path in (target / ".codex").iterdir()} == {
+        "config.toml",
+        "skills",
+    }
     migrated_settings = claude_settings.read_text(encoding="utf-8")
     assert ".agents/hooks/" in migrated_settings
     assert ".claude/hooks/" not in migrated_settings

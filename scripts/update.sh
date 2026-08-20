@@ -16,7 +16,7 @@ set -euo pipefail
 # =============================================================================
 # Constants
 # =============================================================================
-TEMPLATE_REPO="${ORCHESTRA_TEMPLATE_REPO:-https://github.com/DeL-TaiseiOzaki/claude-code-orchestra.git}"
+TEMPLATE_REPO="${ORCHESTRA_TEMPLATE_REPO:-https://github.com/uchiyama4929/claude-code-orchestra.git}"
 LOCAL_VERSION_FILE=".claude/orchestra-version"
 TEMPLATE_BOUNDARY="@orchestra:template-boundary"
 REPO_BOUNDARY="@orchestra:repo-boundary"
@@ -27,7 +27,6 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Directories/files to overwrite entirely from template
 SAFE_DIRS=(
-    ".codex"
     ".agents/rules"
     ".agents/skills"
     ".agents/agents"
@@ -36,6 +35,7 @@ SAFE_DIRS=(
 )
 SAFE_FILES=(
     "AGENTS.md"
+    ".codex/config.toml"
     ".agents/INDEX.md"
     ".agents/check.sh"
     ".agents/change_main.md"
@@ -61,18 +61,11 @@ DEPRECATED_PATHS=(
     ".claude/hooks"
     ".claude/logs"
     ".claude/rules"
-    ".codex/skills"
 )
 
-# Native discovery symlinks kept in sync on every update. Product-native
-# runtimes (Claude Code) auto-discover subagents and skills only from their own
-# directories, which cannot be configured to point elsewhere. Linking those
-# native paths to the canonical .agents/ directories gives native
-# auto-discovery while .agents/ stays the single physical source.
-# Format: "<native-path>:<relative-target>" (target resolved from .claude/).
-NATIVE_DISCOVERY_LINKS=(
-    ".claude/agents:../.agents/agents"
-    ".claude/skills:../.agents/skills"
+NATIVE_DISCOVERY_DIRS=(
+    ".claude/agents:.agents/agents"
+    ".claude/skills:.agents/skills"
 )
 
 LEGACY_PROJECT_DIRS=(
@@ -110,6 +103,9 @@ info()    { echo "${GREEN}[INFO]${RESET} $*"; }
 warn()    { echo "${YELLOW}[WARN]${RESET} $*"; }
 error()   { echo "${RED}[ERROR]${RESET} $*" >&2; }
 header()  { echo ""; echo "${BOLD}━━━ $* ━━━${RESET}"; }
+resolve_path() {
+    python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
+}
 
 TMPDIR_UPDATE=""
 UPDATED_FILES=()
@@ -321,7 +317,7 @@ cleanup_deprecated_paths() {
         # Escape check: resolve symlinks in parent components and ensure
         # the final target is still strictly inside PROJECT_ROOT.
         local resolved
-        resolved="$(realpath -m -- "${target}")"
+        resolved="$(resolve_path "${target}")"
         if [[ "${resolved}" != "${project_root_abs}/"* ]]; then
             error "Refusing to remove '${path}': resolves outside PROJECT_ROOT (${resolved})."
             continue
@@ -367,7 +363,7 @@ migrate_legacy_native_data() {
         fi
         mkdir -p "${backup_root}/.claude" "${canonical}"
         cp -a -- "${legacy}" "${backup_root}/.claude/${name}"
-        cp -an -- "${legacy}/." "${canonical}/"
+        rsync -a --ignore-existing "${legacy}/" "${canonical}/"
         UPDATED_FILES+=(".agents/${name} (merged from .claude/${name})")
     done
 
@@ -608,7 +604,7 @@ repair_claude_entrypoint() {
     local link="${PROJECT_ROOT}/CLAUDE.md"
     local canonical="${PROJECT_ROOT}/AGENTS.md"
     if [[ -L "${link}" ]] \
-        && [[ "$(realpath -m -- "${link}")" == "$(realpath -m -- "${canonical}")" ]]; then
+        && [[ "$(resolve_path "${link}")" == "$(resolve_path "${canonical}")" ]]; then
         info "Verified CLAUDE.md -> AGENTS.md"
         return 0
     fi
@@ -617,36 +613,48 @@ repair_claude_entrypoint() {
     UPDATED_FILES+=("CLAUDE.md -> AGENTS.md")
 }
 
-# Recreate/heal the native discovery symlinks so Claude Code auto-discovers the
-# canonical .agents/ subagents and skills. migrate_legacy_native_data already
-# skips symlinks, so an already-healed link is left untouched; a stale real
-# directory or a corrupted link is replaced with the correct symlink.
+# Keep project-native entries active while exposing Orchestra entries from the
+# canonical .agents directories.
 link_native_discovery_dirs() {
     header "Linking Native Discovery Directories"
 
-    local entry native_path target link backup_root=""
-    for entry in "${NATIVE_DISCOVERY_LINKS[@]}"; do
+    local entry native_path canonical_path native_dir canonical_dir source name link target
+    local backup_root=""
+    for entry in "${NATIVE_DISCOVERY_DIRS[@]}"; do
         native_path="${entry%%:*}"
-        target="${entry##*:}"
-        link="${PROJECT_ROOT}/${native_path}"
-        if [[ -L "${link}" && "$(readlink -- "${link}")" == "${target}" ]]; then
-            info "Verified ${native_path} -> ${target}"
-            continue
-        fi
-        # Real content here is project-owned (a repo that kept its own
-        # subagents/skills natively, or a link corrupted into a file). Preserve
-        # it before replacing, so the link step can never destroy user data.
-        if [[ -e "${link}" || -L "${link}" ]]; then
+        canonical_path="${entry##*:}"
+        native_dir="${PROJECT_ROOT}/${native_path}"
+        canonical_dir="${PROJECT_ROOT}/${canonical_path}"
+
+        if [[ -L "${native_dir}" ]] \
+            && [[ "$(readlink -- "${native_dir}")" == "../${canonical_path}" ]]; then
+            unlink -- "${native_dir}"
+        elif [[ -e "${native_dir}" || -L "${native_dir}" ]] \
+            && [[ ! -d "${native_dir}" || -L "${native_dir}" ]]; then
             if [[ -z "${backup_root}" ]]; then
                 backup_root="${PROJECT_ROOT}/.orchestra-backup-native-discovery-$(date +%Y%m%d%H%M%S)-$$"
             fi
             mkdir -p "${backup_root}/$(dirname -- "${native_path}")"
-            cp -a -- "${link}" "${backup_root}/${native_path}"
-            rm -rf -- "${link}"
+            cp -a -- "${native_dir}" "${backup_root}/${native_path}"
+            rm -rf -- "${native_dir}"
         fi
-        mkdir -p "$(dirname -- "${link}")"
-        ln -s "${target}" "${link}"
-        UPDATED_FILES+=("${native_path} -> ${target}")
+        mkdir -p "${native_dir}"
+
+        for source in "${canonical_dir}"/*; do
+            [[ -e "${source}" || -L "${source}" ]] || continue
+            name="$(basename -- "${source}")"
+            link="${native_dir}/${name}"
+            target="../../${canonical_path}/${name}"
+            if [[ -L "${link}" && "$(readlink -- "${link}")" == "${target}" ]]; then
+                continue
+            fi
+            if [[ -e "${link}" || -L "${link}" ]]; then
+                warn "Preserved existing native entry: ${native_path}/${name}"
+                continue
+            fi
+            ln -s "${target}" "${link}"
+            UPDATED_FILES+=("${native_path}/${name} -> ${target}")
+        done
     done
 
     if [[ -n "${backup_root}" ]]; then
@@ -664,7 +672,9 @@ migrate_native_settings_paths() {
         return 0
     fi
 
-    sed -i 's#\.claude/hooks/#.agents/hooks/#g' "${settings}"
+    local temporary="${settings}.tmp.$$"
+    sed 's#\.claude/hooks/#.agents/hooks/#g' "${settings}" > "${temporary}"
+    mv -f "${temporary}" "${settings}"
     UPDATED_FILES+=(".claude/settings.json (migrated hook paths)")
     info "Migrated .claude hook paths to canonical .agents/hooks paths."
 }
@@ -766,7 +776,9 @@ print_summary() {
     fi
 
     info "Please review the changes and commit when ready:"
-    echo "  git add -A && git commit -m \"chore: update orchestra template to ${NEW_VERSION}\""
+    echo "  git status --short"
+    echo "  git add <reviewed-paths>"
+    echo "  git commit -m \"chore: update orchestra template to ${NEW_VERSION}\""
     echo ""
 }
 

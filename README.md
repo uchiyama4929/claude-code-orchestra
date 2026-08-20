@@ -35,12 +35,13 @@ Run this from the root of an existing Git repository:
 
 ```bash
 template_dir="$(mktemp -d)"
-git clone --depth 1 https://github.com/DeL-TaiseiOzaki/claude-code-orchestra.git "$template_dir"
+git clone --depth 1 https://github.com/uchiyama4929/claude-code-orchestra.git "$template_dir"
 bash "$template_dir/scripts/install.sh" . && rm -rf "$template_dir"
 ```
 
 The installer preserves project-owned files, including `README.md`, `VERSION`, and
-existing `AGENTS.md` / `CLAUDE.md` content. It installs the merged content in
+existing `AGENTS.md` / `CLAUDE.md` content, native Claude agents and skills, and
+`.codex/skills/`. It installs the merged content in
 `.agents/STATE.md`, installs the concise shared `AGENTS.md` contract, and creates
 `CLAUDE.md -> AGENTS.md`. Template-owned path conflicts stop the install before
 changes are made. After reviewing the reported paths, `--force` can be used to back
@@ -74,8 +75,8 @@ codex login
 
 ### System Tools
 
-The installer and updater require `git` and standard Unix shell tools. Template
-updates additionally require `rsync`.
+The installer and updater require Python 3.11+, `git`, and standard Unix shell
+tools. Template updates additionally require `rsync`.
 
 ### Codex Plugin for Claude Code (Optional)
 
@@ -115,10 +116,10 @@ claude --version && codex --version
 
 The Codex model is centralized in `.claude/settings.json` (`env.CODEX_MODEL`), which every `${CODEX_MODEL:-...}` reference resolves to. `.codex/config.toml` (`model` + `model_reasoning_effort = "xhigh"`) must be kept in sync — `.agents/check.sh` verifies coherence between the two. To always use the latest model, bump that single value (currently `gpt-5.6-sol`) — no need to edit individual skill files. The `${CODEX_MODEL:-...}` fallback is just a default for when the env var is unset. Note: `update.sh` never auto-merges `.claude/settings.json` — downstream users must bump `env.CODEX_MODEL` manually after reviewing the Phase 5 diff.
 
-Claude subagent routing is explicit in `.agents/agents/`: `general-purpose-sonnet`
-and `general-purpose-opus` pin their own model aliases in frontmatter. Unspecified
-subagents default to Sonnet through `.claude/settings.json`
-(`env.CLAUDE_CODE_SUBAGENT_MODEL`).
+Claude runs the main context on `opus[1m]` with `xhigh` effort. Teammates default
+to Sonnet, while `general-purpose-opus` pins `opus[1m]` and the rare read-only
+advisor pins `claude-fable-5[1m]`. There is no global subagent-model override, so
+each agent's frontmatter remains effective.
 
 ## Architecture
 
@@ -173,8 +174,9 @@ still runs the acceptance checks and inspects the diff.
 ## Directory Structure
 
 `.agents/` owns shared policy, runtime content, project context, and state.
-`.claude/` and `.codex/` retain only product-native configuration. Their settings
-point directly to canonical capabilities under `.agents/`.
+`.claude/` and `.codex/` retain product-native configuration and project-owned
+extensions. Orchestra entries are canonical under `.agents/`; Claude receives
+entry-level discovery links so unrelated native entries can coexist.
 
 ```
 .
@@ -207,10 +209,13 @@ point directly to canonical capabilities under `.agents/`.
 │
 ├── .claude/
 │   ├── settings.json             # Claude Code settings; hooks point to .agents/
+│   ├── agents/                   # Per-entry links plus project-owned native agents
+│   ├── skills/                   # Per-entry links plus project-owned native skills
 │   └── orchestra-version         # Installed Orchestra version in downstream projects
 │
-├── .codex/                      # Codex native configuration only
-│   └── config.toml              # Shared skills point to .agents/
+├── .codex/
+│   ├── config.toml              # Codex native configuration
+│   └── skills/                  # Optional project-owned legacy skills; preserved
 │
 ├── tests/                      # Contract tests for the template's own scripts and docs
 │
@@ -431,7 +436,7 @@ writing its template version to a project-owned root `VERSION`:
 
 ```bash
 template_dir="$(mktemp -d)"
-git clone --depth 1 https://github.com/DeL-TaiseiOzaki/claude-code-orchestra.git "$template_dir"
+git clone --depth 1 https://github.com/uchiyama4929/claude-code-orchestra.git "$template_dir"
 cp "$template_dir/scripts/install.sh" "$template_dir/scripts/update.sh" scripts/
 chmod +x scripts/install.sh scripts/update.sh
 rm -rf "$template_dir"
@@ -444,8 +449,9 @@ rm -rf "$template_dir"
 - `.agents/STATE.md`, project design/research, logs, and checkpoints are
   preserved. Legacy 2/3-zone `AGENTS.md` or `CLAUDE.md` state is migrated into
   `.agents/STATE.md` before the bootstrap is replaced.
-- Only template-owned `.agents/` subdirectories are atomically synced. Legacy
-  shared-content paths under `.claude/` and `.codex/` are removed.
+- Only template-owned `.agents/` subdirectories and `.codex/config.toml` are
+  atomically synced. Existing `.claude/{agents,skills}` entries and
+  `.codex/skills/` are preserved.
 - Real legacy `.claude/{docs,logs,checkpoints}` data is migrated to `.agents/`;
   collisions are backed up before missing files are merged.
 - Known legacy `.claude/hooks/` references in Claude settings are migrated to
@@ -494,7 +500,7 @@ Automation hooks execute agent coordination and quality checks at the appropriat
 | Hook | Trigger | Action |
 |--------|----------|------|
 | `agent-router.py` | User input | Suggests routing to Codex / Opus subagent |
-| `lint-on-save.py` | File save | Auto-runs lint |
+| `lint-on-save.py` | Claude Edit/Write of a Python file | Reports format, lint, and type errors without rewriting the file |
 | `check-codex-before-write.py` | Before file write | Suggests consulting Codex |
 | `check-codex-after-plan.py` | After Task execution | Suggests Codex review after planning/design tasks |
 | `post-bash-check.py` | Any Bash tool call | Dispatcher: runs error detection, test-failure analysis, and Codex I/O logging in one process (deduped) |
@@ -502,6 +508,12 @@ Automation hooks execute agent coordination and quality checks at the appropriat
 | `post-test-analysis.py` | Test/build failure | Suggests debug analysis via Codex (invoked in-process by `post-bash-check.py`) |
 | `post-implementation-review.py` | After large implementation | Suggests code review via Codex |
 | `log-cli-tools.py` | Codex execution | Records I/O logs (invoked in-process by `post-bash-check.py`; also runs standalone on `TaskCompleted`) |
+
+`lint-on-save.py` is a Claude Code post-tool hook, not an editor-wide save hook.
+It runs `ruff format --check`, `ruff check`, and `ty check` only for the Python
+file Claude just edited. It does not pass `--fix` and cannot change the file.
+Run `poe format` explicitly when a formatting rewrite is intended; that command
+can update every Python file under the current directory.
 
 ## Language Rules
 

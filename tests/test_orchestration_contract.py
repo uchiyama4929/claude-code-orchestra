@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -116,24 +117,23 @@ def test_native_runtime_directories_only_keep_native_settings() -> None:
         "settings.local.json",
         "settings.orchestra.json",
         "orchestra-version",
+        "agents",
+        "skills",
     }
 
     codex_real_files = {
         path.name for path in (REPO_ROOT / ".codex").iterdir() if not path.is_symlink()
     }
     assert codex_real_files == {"config.toml"}
-    # The only symlinks allowed in .claude are the native discovery links that
-    # point Claude Code's subagent/skill discovery at the canonical .agents/
-    # directories. No shared content is physically duplicated.
-    claude_symlinks = {
-        path.name: path.readlink().as_posix()
-        for path in (REPO_ROOT / ".claude").iterdir()
-        if path.is_symlink()
-    }
-    assert claude_symlinks == {
-        "agents": "../.agents/agents",
-        "skills": "../.agents/skills",
-    }
+    for directory in ("agents", "skills"):
+        native = REPO_ROOT / ".claude" / directory
+        canonical = REPO_ROOT / ".agents" / directory
+        assert native.is_dir()
+        assert not native.is_symlink()
+        for source in canonical.iterdir():
+            linked = native / source.name
+            assert linked.is_symlink()
+            assert linked.resolve() == source.resolve()
     assert not any(path.is_symlink() for path in (REPO_ROOT / ".codex").iterdir())
 
 
@@ -251,3 +251,15 @@ def test_consistency_checker_validates_contract_and_bootstraps() -> None:
     assert "check_root_contract" in content
     assert "check_bootstrap_references" in content
     assert "check_native_boundaries" in content
+
+
+def test_consistency_checker_runs_on_macos_tooling() -> None:
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / ".agents/check.sh")],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr

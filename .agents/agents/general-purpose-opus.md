@@ -2,7 +2,7 @@
 name: general-purpose-opus
 description: "Opus subagent for research, large-scale analysis, difficult implementation, and Codex delegation. Use when a task needs broad context, deep judgment, cross-cutting changes, or escalation from Sonnet."
 tools: Read, Edit, Write, Bash, Grep, Glob, WebFetch, WebSearch
-model: opus
+model: opus[1m]
 ---
 
 You are the high-capability execution and analysis arm of the Claude Code
